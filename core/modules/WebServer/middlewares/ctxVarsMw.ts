@@ -6,6 +6,7 @@ import { Next } from "koa";
 import { CtxWithSession } from '../ctxTypes';
 import { isIpAddressLocal } from '@lib/host/isIpAddressLocal';
 import { parseIdentifiersHeader } from '@lib/player/idUtils';
+import { resolveProxyRealIp } from '@lib/host/resolveProxyRealIp';
 
 //The custom tx-related vars set to the ctx
 export type CtxTxVars = {
@@ -20,11 +21,17 @@ export type CtxTxVars = {
  * Middleware responsible for setting up the ctx.txVars
  */
 const ctxVarsMw = (ctx: CtxWithSession, next: Next) => {
+    //Resolve real IP: check proxy first, then fallback to direct connection IP
+    const xffHeader = ctx.headers['x-forwarded-for'];
+    const xff = Array.isArray(xffHeader) ? xffHeader[0] : xffHeader;
+    const proxyResolvedIp = resolveProxyRealIp(ctx.ip, xff);
+    const effectiveIp = proxyResolvedIp ?? ctx.ip;
+
     //Prepare variables
     const txVars: CtxTxVars = {
         isWebInterface: typeof ctx.headers['x-txadmin-token'] !== 'string',
-        realIP: ctx.ip,
-        isLocalRequest: isIpAddressLocal(ctx.ip),
+        realIP: effectiveIp,
+        isLocalRequest: isIpAddressLocal(effectiveIp),
         hostType: 'other',
     };
 

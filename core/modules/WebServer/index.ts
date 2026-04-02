@@ -28,6 +28,7 @@ import { isProxy } from 'node:util/types';
 import serveStaticMw from './middlewares/serveStaticMw';
 import serveRuntimeMw from './middlewares/serveRuntimeMw';
 import consts from '@shared/consts';
+import { resolveProxyRealIp } from '@lib/host/resolveProxyRealIp';
 const console = consoleFactory(modulename);
 const nanoid = customAlphabet(dict49, 32);
 
@@ -176,7 +177,10 @@ export default class WebServer {
         try {
             // console.debug(`HTTP ${req.method} ${req.url}`);
             if (!checkHttpLoad()) return;
-            if (!checkRateLimit(req?.socket?.remoteAddress)) return;
+            const socketIp = req?.socket?.remoteAddress;
+            const xff = req?.headers?.['x-forwarded-for'];
+            const rateLimitIp = resolveProxyRealIp(socketIp, xff) ?? socketIp;
+            if (!checkRateLimit(rateLimitIp)) return;
 
             // FIXME:NEXT:UPDATE: CVE-2026-111497 Mitigation
             // Reject inbound encoded bodies before Koa/Socket.IO decodes them.
