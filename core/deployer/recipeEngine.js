@@ -85,16 +85,23 @@ const taskDownloadFile = async (options, basePath, deployerCtx) => {
  * If the directory structure does not exist, it is created.
  */
 const githubRepoSourceRegex = /^((https?:\/\/github\.com\/)?|@)?([\w.\-_]+)\/([\w.\-_]+).*$/;
-const gitRefRegex = /^[\w.\-]+(\/[\w.\-]+)*$/;
+const isDotsOnly = (segment) => /^\.+$/.test(segment);
+const isGithubSrcValid = (src) => {
+    const match = typeof src == 'string' && src.match(githubRepoSourceRegex);
+    return !!match && !!match[3] && !!match[4] && !isDotsOnly(match[3]) && !isDotsOnly(match[4]);
+};
+//The ref goes in the url path after being encoded segment by segment, so what matters
+//is that it cannot be an empty, `.` or `..` segment, or carry control characters.
 const isGitRefValid = (ref) => (
     typeof ref == 'string'
+    && ref.length > 0
     && ref.length <= 200
-    && gitRefRegex.test(ref)
-    && !ref.split('/').includes('..')
+    && !/[\x00-\x20\x7f\\]/.test(ref)
+    && ref.split('/').every((segment) => segment.length && !isDotsOnly(segment))
 );
 const validatorDownloadGithub = (options) => {
     return (
-        typeof options.src == 'string'
+        isGithubSrcValid(options.src)
         && isPathValid(options.dest, false)
         && (typeof options.ref == 'undefined' || options.ref === '' || isGitRefValid(options.ref))
         && (typeof options.subpath == 'string' || typeof options.subpath == 'undefined')
@@ -112,7 +119,9 @@ const taskDownloadGithub = async (options, basePath, deployerCtx) => {
     //Parsing source
     deployerCtx.$step = 'task start';
     const srcMatch = options.src.match(githubRepoSourceRegex);
-    if (!srcMatch || !srcMatch[3] || !srcMatch[4]) throw new Error('invalid repository');
+    if (!srcMatch || !srcMatch[3] || !srcMatch[4] || isDotsOnly(srcMatch[3]) || isDotsOnly(srcMatch[4])) {
+        throw new Error('invalid repository');
+    }
     const repoOwner = srcMatch[3];
     const repoName = srcMatch[4];
 
