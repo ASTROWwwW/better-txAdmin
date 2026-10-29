@@ -18,7 +18,7 @@ local function handleSpectatePlayer(targetId)
   if allow then
     local targetPed = GetPlayerPed(targetId)
     -- Lets exit if the target doesn't exist
-    if not targetPed then
+    if not targetPed or targetPed == 0 then
       return
     end
     -- checking if spectator and target are on the same routing bucket

@@ -219,9 +219,19 @@ AddEventHandler('txsv:logger:menuEvent', function(source, action, allowed, data)
 end)
 
 -- Extra handlers
+-- The net events below can be triggered by any client, so the payload is validated and the buffer capped
+local CLIENT_LOG_BUFFER_LIMIT = 2000
+local CLIENT_LOG_MAX_LENGTH = 256
+
+local function isClientLogAccepted()
+    return #loggerBuffer < CLIENT_LOG_BUFFER_LIMIT
+end
+
 RegisterNetEvent('txsv:logger:deathEvent', function(killer, cause)
+    if not isClientLogAccepted() then return end
+    if type(cause) ~= 'string' or (killer and type(killer) ~= 'number') then return end
     local logData = {
-        cause = cause,
+        cause = cause:sub(1, CLIENT_LOG_MAX_LENGTH),
         killer = killer
     }
     logger(source, 'DeathNotice', logData)
@@ -230,12 +240,14 @@ end)
 --FIXME: deprecate or allow server commands
 --FIXME: didn't migrate to keep compatibility with external calls
 RegisterNetEvent('txaLogger:CommandExecuted', function(data)
-    logger(source, 'CommandExecuted', data)
+    if not isClientLogAccepted() or type(data) ~= 'string' then return end
+    logger(source, 'CommandExecuted', data:sub(1, CLIENT_LOG_MAX_LENGTH))
 end)
 
 --FIXME: didn't migrate to keep compatibility with external calls
 RegisterNetEvent('txaLogger:DebugMessage', function(data)
-    logger(source, 'DebugMessage', data)
+    if not isClientLogAccepted() or type(data) ~= 'string' then return end
+    logger(source, 'DebugMessage', data:sub(1, CLIENT_LOG_MAX_LENGTH))
 end)
 
 local function logChatMessage(src, author, text)
