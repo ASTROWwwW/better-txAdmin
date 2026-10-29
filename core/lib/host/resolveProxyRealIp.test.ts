@@ -54,8 +54,34 @@ suite('resolveProxyRealIp', () => {
 
     it('fails closed when the client entry cannot be read, never trusting an entry on its left', () => {
         for (const header of ['10.9.9.9, unknown', '10.9.9.9, ', '203.0.113.9,', '10.9.9.9, not-an-ip', ',']) {
-            expect(resolveProxyRealIp('10.0.0.1', header), header).toBe(UNRESOLVED_CLIENT_IP);
+            expect(resolveProxyRealIp('10.0.0.1', header), header).toBe(`${UNRESOLVED_CLIENT_IP}:10.0.0.1`);
         }
+    });
+
+    it('keeps unreadable clients of different proxies in different rate limit buckets', () => {
+        const a = resolveProxyRealIp('10.0.0.1', '10.9.9.9, unknown');
+        const b = resolveProxyRealIp('10.0.0.2', '10.9.9.9, unknown');
+        expect(a).not.toBe(b);
+    });
+
+    it('does not read zone ids, they are not what a proxy appends', () => {
+        for (const header of ['10.9.9.9, fe80::1%eth0', '10.9.9.9, ::1%eth0', '10.9.9.9, ::ffff:127.0.0.1%eth0']) {
+            expect(resolveProxyRealIp('10.0.0.1', header), header).toBe(`${UNRESOLVED_CLIENT_IP}:10.0.0.1`);
+        }
+    });
+
+    it('reads every ipv4-mapped notation as the ipv4 it stands for', () => {
+        expect(resolveProxyRealIp('10.0.0.1', '10.9.9.9, ::ffff:7f00:1')).toBe('127.0.0.1');
+        expect(resolveProxyRealIp('10.0.0.1', '10.9.9.9, 0:0:0:0:0:ffff:203.0.113.9')).toBe('203.0.113.9');
+        expect(resolveProxyRealIp('10.0.0.1', '10.9.9.9, ::FfFf:cb00:7109')).toBe('203.0.113.9');
+    });
+
+    it('skips a trusted proxy written in a mapped notation', () => {
+        expect(resolveProxyRealIp('10.0.0.1', '203.0.113.9, ::ffff:a00:5')).toBe('203.0.113.9');
+    });
+
+    it('returns the leftmost entry when every hop is a trusted proxy', () => {
+        expect(resolveProxyRealIp('10.0.0.1', '10.1.1.1, 10.2.2.2')).toBe('10.1.1.1');
     });
 
     it('ignores malformed entries and a missing header', () => {

@@ -25,6 +25,12 @@ suite('isIpAddressLocal', () => {
         }
     });
 
+    it('does not take other addresses for the loopback just because they start like it', () => {
+        for (const ip of ['::1:2:3:4', '::1%eth0', '::127.0.0.1', '::ffff:127.0.0.1%eth0', '::10']) {
+            expect(isIpAddressLocal(ip), ip).toBe(false);
+        }
+    });
+
     it('accepts the extra addresses registered at runtime', () => {
         expect(isIpAddressLocal('203.0.113.77')).toBe(false);
         addLocalIpAddress('203.0.113.77');

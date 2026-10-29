@@ -1,20 +1,40 @@
-import { isIP, isIPv4 } from 'node:net';
+import { isIP } from 'node:net';
 import { txHostConfig } from '@core/globalData';
 import { isIpInRanges } from '@lib/host/isIpInRanges';
 
 
 /**
- * Returned when the proxy did not give a client address we can read.
+ * Prefix of what is returned when the proxy did not give a client address we can read.
+ * It is followed by the address of the proxy socket, so those clients share a rate limit bucket
+ * with the other unreadable clients of the same proxy, not with the ones of another proxy.
  * It is not a local address, so such requests are never exempted from the rate limiter.
  */
 export const UNRESOLVED_CLIENT_IP = 'unresolved';
 
-const MAPPED_PREFIX = '::ffff:';
+
+/**
+ * The WHATWG URL parser prints every notation of an ipv6 address in one canonical form,
+ * and an ipv4-mapped one as `::ffff:hhhh:hhhh`, which we turn back into dotted ipv4.
+ */
+const canonicalizeIpv6 = (ip: string) => {
+    let canonical: string;
+    try {
+        canonical = new URL(`http://[${ip}]`).hostname.slice(1, -1);
+    } catch (error) {
+        return undefined;
+    }
+    const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(canonical);
+    if (!mapped) return canonical;
+    const high = parseInt(mapped[1], 16);
+    const low = parseInt(mapped[2], 16);
+    return `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`;
+};
 
 
 /**
  * Reads an X-Forwarded-For entry, accepting what real proxies append:
- * ipv4, ipv6, `ip:port`, `[ipv6]:port` and ipv4-mapped ipv6. Returns undefined if unreadable.
+ * ipv4, ipv6 (any notation), `ip:port`, `[ipv6]:port` and ipv4-mapped ipv6.
+ * Returns undefined if unreadable. Zone ids (`%eth0`) are not accepted.
  */
 const parseForwardedEntry = (raw: string) => {
     let ip = raw.trim();
@@ -25,10 +45,11 @@ const parseForwardedEntry = (raw: string) => {
     } else if (withPort) {
         ip = withPort[1];
     }
-    if (ip.toLowerCase().startsWith(MAPPED_PREFIX) && isIPv4(ip.slice(MAPPED_PREFIX.length))) {
-        ip = ip.slice(MAPPED_PREFIX.length);
-    }
-    return isIP(ip) ? ip : undefined;
+    if (ip.includes('%')) return undefined;
+    const family = isIP(ip);
+    if (family === 4) return ip;
+    if (family === 6) return canonicalizeIpv6(ip);
+    return undefined;
 };
 
 
@@ -54,14 +75,16 @@ export const resolveProxyRealIp = (socketIp: string, xffHeader: string | undefin
     // X-Forwarded-For: client, proxy1, proxy2
     // Walk from right to left, skipping trusted proxies
     const entries = xffHeader.split(',');
+    let leftmost: string | undefined;
     for (let i = entries.length - 1; i >= 0; i--) {
         const ip = parseForwardedEntry(entries[i]);
-        if (ip === undefined) return UNRESOLVED_CLIENT_IP;
+        if (ip === undefined) return `${UNRESOLVED_CLIENT_IP}:${socketIp}`;
         if (!isIpInRanges(ip, proxyIpRanges)) {
             return ip;
         }
+        leftmost = ip;
     }
 
-    // All IPs in the chain are trusted proxies — return the leftmost
-    return parseForwardedEntry(entries[0]) ?? UNRESOLVED_CLIENT_IP;
+    // All IPs in the chain are trusted proxies — return the leftmost (split() always yields one entry)
+    return leftmost as string;
 };

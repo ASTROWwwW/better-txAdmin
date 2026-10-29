@@ -77,7 +77,7 @@ suite('ctxVarsMw over real http', () => {
         hostConfig.proxyIpRanges = parseIpRanges(['127.0.0.1']);
         for (const header of ['127.0.0.1, unknown', '127.0.0.1, ', '198.51.100.1, garbage']) {
             const vars = await requestVars({ 'x-forwarded-for': header });
-            expect(vars.realIP, header).toBe('unresolved');
+            expect(vars.realIP, header).toBe('unresolved:127.0.0.1');
             expect(vars.isLocalRequest, header).toBe(false);
         }
     });

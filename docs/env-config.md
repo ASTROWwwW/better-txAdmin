@@ -95,6 +95,7 @@ The specific way to set up those variables vary from system to system, and there
     - When a request comes from one of those addresses, txAdmin reads the real client IP from the `X-Forwarded-For` header (walking it from right to left and skipping trusted proxies). It is used by the rate limiter, the login logs and the local-request checks.
     - Octets must be at most 255 and prefixes at most 32. IPv6 addresses are not supported, but IPv4-mapped ones (`::ffff:10.0.0.5`) are read as the IPv4 they carry.
     - <mark>NOTE:</mark> Your proxy must **set or append** the client IP in `X-Forwarded-For`. If it passes the header through untouched, a client could forge it. Only list proxies you control.
+    - If the last address the proxy wrote cannot be read (for example Squid with `forwarded_for off` writes `unknown`), txAdmin does not guess: those requests count as non-local and share one rate limit bucket per proxy, so every user behind that proxy is limited together. Configure the proxy to write the client address.
     - It can also be set with the `txAdminProxyIpRange` ConVar.
 
 ### Provider
