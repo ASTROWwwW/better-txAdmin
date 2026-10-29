@@ -46,13 +46,13 @@ export default async function AuthVerifyPassword(ctx: InitializedCtx) {
         //Checking admin
         const vaultAdmin = txCore.adminStore.getAdminByName(postBody.username);
         if (!vaultAdmin) {
-            console.warn(`Wrong username from: ${ctx.ip}`);
+            console.warn(`Wrong username from: ${ctx.txVars.realIP}`);
             return ctx.send<ApiVerifyPasswordResp>({
                 error: 'Wrong username or password!',
             });
         }
         if (!VerifyPasswordHash(postBody.password, vaultAdmin.password_hash)) {
-            console.warn(`Wrong password from: ${ctx.ip}`);
+            console.warn(`Wrong password from: ${ctx.txVars.realIP}`);
             return ctx.send<ApiVerifyPasswordResp>({
                 error: 'Wrong username or password!',
             });
@@ -69,7 +69,7 @@ export default async function AuthVerifyPassword(ctx: InitializedCtx) {
         ctx.sessTools.set({ auth: sessData });
 
         const authedAdmin = new AuthedAdmin(vaultAdmin, sessData.csrfToken);
-        authedAdmin.logAction(`logged in from ${ctx.ip} via password auth`);
+        authedAdmin.logAction(`logged in from ${ctx.txVars.realIP} via password auth`);
         txCore.metrics.txRuntime.loginOrigins.count(ctx.txVars.hostType);
         txCore.metrics.txRuntime.loginMethods.count('password');
         return ctx.send<ReactAuthDataType>(authedAdmin.getAuthData());
