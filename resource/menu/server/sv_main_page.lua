@@ -89,7 +89,7 @@ RegisterNetEvent('txsv:req:healPlayer', function(id)
   local allow = PlayerHasTxPermission(src, 'players.heal')
   if allow then
     local ped = GetPlayerPed(id)
-    if ped and ped ~= 0 then
+    if ped then
       TriggerClientEvent('txcl:heal', id)
       -- For use with third party resources that handle players
       -- 'revive state' standalone from health (esx-ambulancejob, qb-ambulancejob, etc)
