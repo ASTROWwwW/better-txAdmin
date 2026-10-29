@@ -149,9 +149,10 @@ export const getServerDataConfigs = async (serverDataPath: string, serverDataCon
  */
 export const stripServerCfgFromPath = (dataPath: string) => {
     const trimmed = dataPath.replace(/[/\\]+$/, '');
-    return path.basename(trimmed).toLowerCase() === 'server.cfg'
-        ? path.dirname(trimmed)
-        : dataPath;
+    if (path.basename(trimmed).toLowerCase() !== 'server.cfg') return dataPath;
+    const parent = path.dirname(trimmed);
+    //A bare file name has no folder to fall back to, '.' would silently mean the process cwd
+    return parent === '.' ? dataPath : parent;
 };
 
 

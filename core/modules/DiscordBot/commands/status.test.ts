@@ -47,7 +47,7 @@ suite('generateStatusMessage maintenance status', () => {
     it('does not hide an offline server behind the maintenance label', () => {
         stubRuntime('adminOnly', FxMonitorHealth.OFFLINE);
         const embed = generateStatusMessage(embedJson, '{}').embeds[0];
-        expect(embed.data.description).not.toBe('🟠 Maintenance');
+        expect(embed.data.description).toBe('🔴 Offline');
     });
 
     it('does not say a delayed restart is happening right now', () => {

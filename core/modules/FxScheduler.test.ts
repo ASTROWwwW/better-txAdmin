@@ -1,5 +1,5 @@
 //@ts-nocheck
-import { suite, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { suite, it, describe, expect, vi, beforeEach, afterEach } from 'vitest';
 import FxScheduler from './FxScheduler';
 
 const MINUTE = 60_000;
@@ -200,6 +200,29 @@ suite('FxScheduler delayed restarts', () => {
         txCore.fxRunner.child.uptime = 10_000;
         await tick();
         expect(restartSpy).not.toHaveBeenCalled();
+    });
+
+    describe('triggerServerRestart', () => {
+        let real: FxScheduler;
+        beforeEach(() => {
+            stubRuntime({ onlyWhenEmpty: false, maxRestartDelayMinutes: 30 }, players);
+            txCore.fxRunner.restartServer = vi.fn();
+            txCore.logger = { admin: { write: vi.fn() }, fxserver: { logInformational: vi.fn() } };
+            real = new FxScheduler();
+        });
+
+        it('restarts the server and logs the reason', async () => {
+            await real.triggerServerRestart('scheduled restart at 12:00', 'translated reason');
+            expect(txCore.fxRunner.restartServer).toHaveBeenCalledTimes(1);
+            expect(txCore.fxRunner.restartServer.mock.calls[0][0]).toBe('translated reason');
+            expect(txCore.logger.admin.write).toHaveBeenCalledWith('SCHEDULER', 'Restarting server: scheduled restart at 12:00');
+        });
+
+        it('does nothing when the server is not running', async () => {
+            txCore.fxRunner.isIdle = true;
+            expect(await real.triggerServerRestart('x', 'y')).toBe(false);
+            expect(txCore.fxRunner.restartServer).not.toHaveBeenCalled();
+        });
     });
 
     it('forgets the delayed restart when the server closes', async () => {

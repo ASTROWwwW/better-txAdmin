@@ -45,4 +45,9 @@ suite('stripServerCfgFromPath', () => {
     it('keeps the filesystem root valid', () => {
         expect(stripServerCfgFromPath('/server.cfg')).toBe('/');
     });
+
+    it('does not turn a bare server.cfg into the current directory', () => {
+        expect(stripServerCfgFromPath('server.cfg')).toBe('server.cfg');
+        expect(stripServerCfgFromPath('./server.cfg')).toBe('./server.cfg');
+    });
 });
