@@ -110,7 +110,8 @@ export default class WebSocket {
             );
             if (!authResult.success) {
                 //@ts-ignore
-                return terminateSession(socket, 'session invalidated by websocket.reCheckAdminAuths()', true);
+                terminateSession(socket, 'session invalidated by websocket.reCheckAdminAuths()', true);
+                continue;
             }
 
             //Sending auth data update - even if nothing changed
@@ -186,11 +187,26 @@ export default class WebSocket {
                     if (commandData.permission === true || authedAdmin.hasPermission(commandData.permission)) {
                         socket.on(commandName, (...args) => {
                             //Checking if admin is still in the room - perms change can make them be kicked out of room
-                            if (socket.rooms.has(requestedRoomName)) {
-                                commandData.handler(authedAdmin, ...args);
-                            } else {
+                            if (!socket.rooms.has(requestedRoomName)) {
                                 console.verbose.debug('SocketIO', `Command '${requestedRoomName}#${commandName}' was ignored due to admin not being in the room.`);
+                                return;
                             }
+
+                            //Re-checking the auth, as the admin might have lost the command permission after connecting
+                            const currAuthResult = checkRequestAuth(
+                                socket.handshake.headers,
+                                reqIp,
+                                isIpAddressLocal(reqIp),
+                                socket.sessTools
+                            );
+                            if (
+                                !currAuthResult.success
+                                || (commandData.permission !== true && !currAuthResult.admin.hasPermission(commandData.permission))
+                            ) {
+                                console.verbose.debug('SocketIO', `Command '${requestedRoomName}#${commandName}' was ignored due to missing permission.`);
+                                return;
+                            }
+                            commandData.handler(currAuthResult.admin, ...args);
                         });
                     }
                 }
