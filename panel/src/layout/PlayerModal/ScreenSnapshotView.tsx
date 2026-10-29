@@ -107,7 +107,7 @@ export default function ScreenSnapshotView({ mutex, netid, displayName, notice, 
         <>
             <p className="text-sm text-muted-foreground">
                 A screenshot of the player's game about every 1.5 seconds, not a video.
-                Your viewing is written to the action log and ends after 10 minutes unless you renew it.
+                Your viewing is written to the action log, and it ends after 10 minutes unless you keep watching.
             </p>
             {notice ? (
                 <div className="rounded-md border bg-secondary/40 p-2 text-sm" role="status">{notice}</div>
