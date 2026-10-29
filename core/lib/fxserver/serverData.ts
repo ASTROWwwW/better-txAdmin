@@ -129,6 +129,7 @@ export const getServerDataConfigs = async (serverDataPath: string, serverDataCon
         if (typeof entrySize !== 'number' || !entryPath.endsWith('.cfg')) continue;
         if (entrySize > CFG_SIZE_LIMIT) {
             configs.push([entryPath, 'file is too big']);
+            continue;
         }
 
         try {
