@@ -169,7 +169,7 @@ async function handleEdit(ctx: AuthedCtx) {
     //Prepare and filter variables
     const originalName = ctx.request.body.originalName.trim();
     const newName = ctx.request.body.name.trim();
-    const isNameChanged = originalName.toLowerCase() !== newName.toLowerCase();
+    const isNameChanged = originalName !== newName; //case-only changes are renames too
     const citizenfxID = ctx.request.body.citizenfxID.trim();
     const discordID = ctx.request.body.discordID.trim();
 
