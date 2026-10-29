@@ -58,7 +58,7 @@ export default async function RunAdvancedCommand(ctx: AuthedCtx) {
 
     //Parsing the command
     const [, cmd, rawArgs] = cmdStr.match(/^(?<cmd>\w+)(?:\s+(?<rawArgs>.*))?$/) || [];
-    if (!cmd || !(cmd in handlers) || !handlers[cmd]) {
+    if (!cmd || !Object.prototype.hasOwnProperty.call(handlers, cmd)) {
         return sendTypedResp({
             error: `Invalid command: ${cmdStr}`,
         });

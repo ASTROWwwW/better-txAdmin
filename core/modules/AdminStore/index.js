@@ -5,7 +5,7 @@ import { cloneDeep } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import { txHostConfig } from '@core/globalData';
 import CfxProvider from './providers/CitizenFX.js';
-import { createHash } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import consoleFactory from '@lib/console.js';
 import fatalError from '@lib/fatalError.js';
 import { chalkInversePad } from '@lib/misc.js';
@@ -112,7 +112,7 @@ export default class AdminStore {
         //Printing PIN or starting loop
         if (!adminFileExists) {
             if (!txHostConfig.defaults.account) {
-                this.addMasterPin = (Math.random() * 10000).toFixed().padStart(4, '0');
+                this.addMasterPin = randomInt(10000).toString().padStart(4, '0');
                 this.admins = false;
             } else {
                 const { username, fivemId, password } = txHostConfig.defaults.account;
