@@ -194,6 +194,66 @@ suite('FxScheduler delayed restarts', () => {
         expect(() => scheduler.setNextTempSchedule('+10')).toThrow('delayed');
     });
 
+    it('a cancel holds for the whole minute even when another slot falls in it', async () => {
+        build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+        txConfig.restarter.schedule = ['12:00', '12:05'];
+        players.count = 3;
+        await tick(); //12:00:30, delayed
+        vi.setSystemTime(new Date(2026, 9, 29, 12, 5, 30));
+        scheduler.setNextSkip(true, 'admin');
+        expect(scheduler.getStatus().nextIsDelayed).toBe(false);
+        expect(scheduler.getStatus().nextSkip).toBe(true);
+        await scheduler.checkSchedule();
+        expect(scheduler.getStatus().nextIsDelayed).toBe(false);
+        expect(restartSpy).not.toHaveBeenCalled();
+    });
+
+    it('a config save in the minute of a cancel does not bring the restart back', async () => {
+        build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+        players.count = 3;
+        await tick();
+        scheduler.setNextSkip(true, 'admin');
+        scheduler.handleConfigUpdate({} as any);
+        expect(scheduler.getStatus().nextIsDelayed).toBe(false);
+        players.count = 0;
+        await scheduler.checkSchedule();
+        expect(restartSpy).not.toHaveBeenCalled();
+    });
+
+    it('a cancelled delayed temporary restart leaves no stale temporary schedule behind', async () => {
+        build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+        txConfig.restarter.schedule = ['13:00'];
+        scheduler.setNextTempSchedule('12:00');
+        players.count = 3;
+        await tick(); //12:00:30, delayed
+        scheduler.setNextSkip(true, 'admin');
+        expect(scheduler.getStatus().nextIsTemp).toBe(false);
+        players.count = 0;
+        vi.setSystemTime(new Date(2026, 9, 29, 13, 0, 30));
+        await scheduler.checkSchedule();
+        expect(restartSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('restarts once when a config save and more checks land in the minute of a direct restart', async () => {
+        build({ onlyWhenEmpty: false, maxRestartDelayMinutes: 30 });
+        await tick();
+        expect(restartSpy).toHaveBeenCalledTimes(1);
+        scheduler.handleConfigUpdate({} as any);
+        await scheduler.checkSchedule();
+        expect(restartSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops a temporary schedule that was skipped because of the boot grace period', async () => {
+        build({ onlyWhenEmpty: false, maxRestartDelayMinutes: 30 });
+        txConfig.restarter.schedule = ['13:00'];
+        txConfig.restarter.bootGracePeriod = 45;
+        txCore.fxRunner.child.uptime = 10_000;
+        scheduler.setNextTempSchedule('12:00');
+        await tick();
+        expect(restartSpy).not.toHaveBeenCalled();
+        expect(scheduler.getStatus().nextIsTemp).toBe(false);
+    });
+
     it('skips the scheduled restart while the server is still in its boot grace period', async () => {
         build({ onlyWhenEmpty: false, maxRestartDelayMinutes: 30 });
         txConfig.restarter.bootGracePeriod = 45;

@@ -55,7 +55,8 @@ export default class FxScheduler {
     private nextSkip: number | false = false;
     private pendingDelayedRestart: RestartInfo | false = false;
     private pendingDelayedRestartSince: number | false = false;
-    private lastRestartMinuteTs: number | false = false;
+    //Minute in which a restart was already triggered or a delayed one was cancelled: nothing else restarts in it
+    private settledMinuteTs: number | false = false;
 
     constructor() {
         //Initial check to update status
@@ -162,7 +163,10 @@ export default class FxScheduler {
             if (this.pendingDelayedRestart) {
                 prevMinuteFloorTs = this.pendingDelayedRestart.minuteFloorTs;
                 temporary = !!this.nextTempSchedule;
-                this.nextSkip = prevMinuteFloorTs; //so the checkSchedule below, still in that minute, does not restart
+                //The checks below, in this same minute, must not delay it again, even for another slot that falls in it
+                const thisMinuteTs = new Date().setSeconds(0, 0);
+                this.nextSkip = Math.max(prevMinuteFloorTs, thisMinuteTs);
+                this.settledMinuteTs = thisMinuteTs;
                 this.pendingDelayedRestart = false;
                 this.pendingDelayedRestartSince = false;
                 this.nextTempSchedule = false;
@@ -301,7 +305,7 @@ export default class FxScheduler {
         //Checking if server restart or warning time
         if (nextDistMins === 0) {
             //Several checks can land in the same minute (config save, skip toggle), only restart once
-            if (this.lastRestartMinuteTs === thisMinuteTs) return;
+            if (this.settledMinuteTs === thisMinuteTs) return;
 
             //Check if server is in boot cooldown
             const processUptime = Math.floor((txCore.fxRunner.child?.uptime ?? 0) / 1000);
@@ -320,7 +324,7 @@ export default class FxScheduler {
             }
 
             //restart server
-            this.lastRestartMinuteTs = thisMinuteTs;
+            this.settledMinuteTs = thisMinuteTs;
             this.triggerServerRestart(
                 `scheduled restart at ${nextRestart.string}`,
                 txCore.translator.t('restarter.schedule_reason', { time: nextRestart.string }),
@@ -373,7 +377,7 @@ export default class FxScheduler {
         this.pendingDelayedRestart = false;
         this.pendingDelayedRestartSince = false;
         this.nextTempSchedule = false;
-        this.lastRestartMinuteTs = new Date().setSeconds(0, 0);
+        this.settledMinuteTs = new Date().setSeconds(0, 0);
         this.triggerServerRestart(
             `scheduled restart at ${restartInfo.string} (delayed)`,
             txCore.translator.t('restarter.schedule_reason', { time: restartInfo.string }),
