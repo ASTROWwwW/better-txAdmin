@@ -71,3 +71,24 @@ test('shortenId', () => {
     expect(shortenId('discord:12345678', 3)).toBe('discord:12345678'); // 8 chars = 3*2+2, should not shorten
     expect(shortenId('discord:123456789', 3)).toBe('discord:123…789'); // 9 chars > 3*2+2, should shorten
 });
+
+
+suite('parseIdentifiersHeader', () => {
+    it('splits the comma separated ids sent by the resource', () => {
+        expect(idUtils.parseIdentifiersHeader('license:abc,ip:1.2.3.4,fivem:555')).toEqual(['license:abc', 'ip:1.2.3.4', 'fivem:555']);
+    });
+
+    it('drops empty entries', () => {
+        expect(idUtils.parseIdentifiersHeader('license:abc,,')).toEqual(['license:abc']);
+        expect(idUtils.parseIdentifiersHeader('')).toEqual([]);
+    });
+
+    it('rejects non strings', () => {
+        expect(idUtils.parseIdentifiersHeader(undefined)).toBeUndefined();
+        expect(idUtils.parseIdentifiersHeader(['license:abc'])).toBeUndefined();
+    });
+
+    it('rejects values merged by the http parser from duplicated headers', () => {
+        expect(idUtils.parseIdentifiersHeader('fivem:555, license:abc,ip:1.2.3.4')).toBeUndefined();
+    });
+});

@@ -5,6 +5,7 @@ const console = consoleFactory(modulename);
 import { Next } from "koa";
 import { CtxWithSession } from '../ctxTypes';
 import { isIpAddressLocal } from '@lib/host/isIpAddressLocal';
+import { parseIdentifiersHeader } from '@lib/player/idUtils';
 
 //The custom tx-related vars set to the ctx
 export type CtxTxVars = {
@@ -38,14 +39,12 @@ const ctxVarsMw = (ctx: CtxWithSession, next: Next) => {
     //Setting up the user's real ip from the webpipe
     //NOTE: not used anywhere except rate limiter, and login logs.
     if (
-        typeof ctx.headers['x-txadmin-identifiers'] === 'string'
-        && typeof ctx.headers['x-txadmin-token'] === 'string'
+        typeof ctx.headers['x-txadmin-token'] === 'string'
         && ctx.headers['x-txadmin-token'] === txCore.webServer.luaComToken
         && txVars.isLocalRequest
     ) {
-        const ipIdentifier = ctx.headers['x-txadmin-identifiers']
-            .split(',')
-            .find((i) => i.substring(0, 3) === 'ip:');
+        const ipIdentifier = parseIdentifiersHeader(ctx.headers['x-txadmin-identifiers'])
+            ?.find((i) => i.substring(0, 3) === 'ip:');
         if (ipIdentifier) {
             const srcIP = ipIdentifier.substring(3);
             if (consts.regexValidIP.test(srcIP)) {

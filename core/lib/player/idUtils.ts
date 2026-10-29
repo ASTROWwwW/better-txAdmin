@@ -138,6 +138,16 @@ export const getIdFromOauthNameid = (nameid: string) => {
 
 
 /**
+ * Parses the X-TxAdmin-Identifiers header built by the resource, which joins the ids with "," and never adds whitespace.
+ * Any whitespace means the http parser merged duplicated headers with ", ", so someone injected an extra one.
+ */
+export const parseIdentifiersHeader = (header: unknown) => {
+    if (typeof header !== 'string' || /\s/.test(header)) return;
+    return header.split(',').filter((id) => id.length);
+}
+
+
+/**
  * Returns a string of shortened IDs/HWIDs
  */
 export const summarizeIdsArray = (ids: string[]) => {
