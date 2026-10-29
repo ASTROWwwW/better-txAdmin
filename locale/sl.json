@@ -9,7 +9,9 @@
         "partial_hang_warn_discord": "Zaradi delnega crasha strežnika, se bo **%{servername}** ponovno zagnal čez 1 minuto.",
         "schedule_reason": "načrtovan restart ob %{time}",
         "schedule_warn": "Ta strežnik se bo ponovno zagnal čez %{smart_count} minuto. Prosimo, zapustite strežnik. |||| Ta strežnik se bo ponovno zagnal čez %{smart_count} minut/i/e.",
-        "schedule_warn_discord": "**%{servername}** se bo ponovno zagnal čez %{smart_count} minuto. |||| **%{servername}** se bo ponovno zagnal čez %{smart_count} minut/i/e."
+        "schedule_warn_discord": "**%{servername}** se bo ponovno zagnal čez %{smart_count} minuto. |||| **%{servername}** se bo ponovno zagnal čez %{smart_count} minut/i/e.",
+        "schedule_delayed_discord": "The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} player is online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest. |||| The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} players are online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest.",
+        "schedule_delayed_forced_discord": "**%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} player still online. |||| **%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} players still online."
     },
     "kick_messages": {
         "everyone": "Vsi igralci so bili kick-ani: %{reason}.",

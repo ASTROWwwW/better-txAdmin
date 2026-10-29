@@ -9,7 +9,9 @@
         "partial_hang_warn_discord": "En raison d'un blocage partiel, **%{servername}** redémarrera dans 1 minute.",
         "schedule_reason": "redémarage prévu à %{time}",
         "schedule_warn": "Le serveur redémarrera dans %{smart_count} minute. Merci de vous déconnecter. |||| Le serveur redémarrera dans %{smart_count} minutes.",
-        "schedule_warn_discord": "**%{servername}** redémarrera dans %{smart_count} minute. |||| **%{servername}** redémarrera dans %{smart_count} minutes."
+        "schedule_warn_discord": "**%{servername}** redémarrera dans %{smart_count} minute. |||| **%{servername}** redémarrera dans %{smart_count} minutes.",
+        "schedule_delayed_discord": "Le redémarrage de **%{servername}** prévu à %{time} est retardé car %{smart_count} joueur est en ligne. Il aura lieu dès que le serveur sera vide, ou dans %{maxMinutes} minutes au plus tard. |||| Le redémarrage de **%{servername}** prévu à %{time} est retardé car %{smart_count} joueurs sont en ligne. Il aura lieu dès que le serveur sera vide, ou dans %{maxMinutes} minutes au plus tard.",
+        "schedule_delayed_forced_discord": "**%{servername}** redémarre maintenant : l'attente maximale de %{maxMinutes} minutes pour le redémarrage prévu à %{time} est écoulée, avec %{smart_count} joueur encore en ligne. |||| **%{servername}** redémarre maintenant : l'attente maximale de %{maxMinutes} minutes pour le redémarrage prévu à %{time} est écoulée, avec %{smart_count} joueurs encore en ligne."
     },
     "kick_messages": {
         "everyone": "All players kicked: %{reason}.",

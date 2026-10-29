@@ -9,7 +9,9 @@
         "partial_hang_warn_discord": ".سيتم إعادة التشغيل خلال دقيقة واحدة **%{servername}** ،بسبب تعليق جزئي",
         "schedule_reason": "%{time} أعادة تشغيل مجدول في",
         "schedule_warn": ".دقائق %{smart_count} دقيقة. يرجى قطع الاتصال الآن. |||| تمت جدولة هذا الخادم لإعادة التشغيل في %{smart_count} تمت جدولة هذا الخادم لإعادة التشغيل في",
-        "schedule_warn_discord": ".دقائق %{smart_count} ومن المقرر إعادة التشغيل في **%{servername}** |||| .دقيقة %{smart_count} ومن المقرر إعادة التشغيل في **%{servername}**"
+        "schedule_warn_discord": ".دقائق %{smart_count} ومن المقرر إعادة التشغيل في **%{servername}** |||| .دقيقة %{smart_count} ومن المقرر إعادة التشغيل في **%{servername}**",
+        "schedule_delayed_discord": "The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} player is online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest. |||| The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} players are online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest.",
+        "schedule_delayed_forced_discord": "**%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} player still online. |||| **%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} players still online."
     },
     "kick_messages": {
         "everyone": "تم طرد جميع اللاعبين: %{reason}.",

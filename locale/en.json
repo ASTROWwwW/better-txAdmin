@@ -9,6 +9,8 @@
         "partial_hang_warn_discord": "Due to a partial hang, **%{servername}** will restart in 1 minute.",
         "schedule_reason": "scheduled restart at %{time}",
         "schedule_warn": "This server is scheduled to restart in %{smart_count} minute. Please disconnect now. |||| This server is scheduled to restart in %{smart_count} minutes.",
+        "schedule_delayed_discord": "The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} player is online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest. |||| The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} players are online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest.",
+        "schedule_delayed_forced_discord": "**%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} player still online. |||| **%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} players still online.",
         "schedule_warn_discord": "**%{servername}** is scheduled to restart in %{smart_count} minute. |||| **%{servername}** is scheduled to restart in %{smart_count} minutes."
     },
     "kick_messages": {

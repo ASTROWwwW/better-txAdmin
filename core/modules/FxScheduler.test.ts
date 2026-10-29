@@ -1,5 +1,7 @@
 //@ts-nocheck
 import { suite, it, describe, expect, vi, beforeEach, afterEach } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import FxScheduler from './FxScheduler';
 
 const MINUTE = 60_000;
@@ -282,6 +284,84 @@ suite('FxScheduler delayed restarts', () => {
             txCore.fxRunner.isIdle = true;
             expect(await real.triggerServerRestart('x', 'y')).toBe(false);
             expect(txCore.fxRunner.restartServer).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('discord alerts', () => {
+        const announcements = () => txCore.discordBot.sendAnnouncement.mock.calls.map((c) => c[0]);
+
+        it('announces once that the restart is delayed, with the players online and the maximum wait', async () => {
+            build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+            players.count = 3;
+            await tick();
+            await tick();
+            await tick();
+            expect(announcements()).toEqual([{
+                type: 'warning',
+                description: {
+                    key: 'restarter.schedule_delayed_discord',
+                    data: { servername: 'Test', time: '12:00', smart_count: 3, maxMinutes: 30 },
+                },
+            }]);
+        });
+
+        it('does not announce a delay when the server is empty or the option is off', async () => {
+            build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+            await tick();
+            expect(announcements()).toEqual([]);
+            vi.setSystemTime(new Date(2026, 9, 29, 11, 59, 30));
+            build({ onlyWhenEmpty: false, maxRestartDelayMinutes: 30 });
+            players.count = 4;
+            await tick();
+            expect(restartSpy).toHaveBeenCalledTimes(1); //the 12:00 slot did run, with players online
+            expect(announcements()).toEqual([]);
+        });
+
+        it('announces that the maximum wait was reached with players still online', async () => {
+            build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 2 });
+            players.count = 8;
+            await tick(); //delayed
+            txCore.discordBot.sendAnnouncement.mockClear();
+            await tick();
+            await tick(); //2 minutes, forced
+            expect(restartSpy).toHaveBeenCalledTimes(1);
+            expect(announcements()).toEqual([{
+                type: 'danger',
+                description: {
+                    key: 'restarter.schedule_delayed_forced_discord',
+                    data: { servername: 'Test', time: '12:00', smart_count: 8, maxMinutes: 2 },
+                },
+            }]);
+        });
+
+        it('says nothing more when the server emptied or the option was turned off', async () => {
+            build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+            players.count = 3;
+            await tick();
+            txCore.discordBot.sendAnnouncement.mockClear();
+            players.count = 0;
+            await tick();
+            expect(restartSpy).toHaveBeenCalledTimes(1);
+            expect(announcements()).toEqual([]);
+
+            vi.setSystemTime(new Date(2026, 9, 29, 11, 59, 30));
+            build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+            players.count = 3;
+            await tick();
+            txCore.discordBot.sendAnnouncement.mockClear();
+            txConfig.restarter.onlyWhenEmpty = false;
+            scheduler.handleConfigUpdate({} as any);
+            expect(restartSpy).toHaveBeenCalledTimes(1);
+            expect(announcements()).toEqual([]);
+        });
+
+        it('has its texts in the english locale', () => {
+            const en = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../locale/en.json'), 'utf8'));
+            for (const key of ['schedule_delayed_discord', 'schedule_delayed_forced_discord']) {
+                expect(en.restarter[key], key).toBeTypeOf('string');
+                expect(en.restarter[key]).toContain('%{servername}');
+                expect(en.restarter[key]).toContain('%{smart_count}');
+            }
         });
     });
 

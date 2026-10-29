@@ -9,7 +9,9 @@
         "partial_hang_warn_discord": "Aufgrund von zeitweiligen Lags startet **%{servername}** in einer Minute neu.",
         "schedule_reason": "Automatisierter Neustart um %{time}",
         "schedule_warn": "Der Server wird in einer Minute neu gestartet. Bitte trenne die Verbindung jetzt. |||| Der Server wird in %{smart_count} Minuten neu gestartet.",
-        "schedule_warn_discord": "**%{servername}** wird in einer Minute neu gestartet. |||| **%{servername}** wird in %{smart_count} Minuten neu gestartet."
+        "schedule_warn_discord": "**%{servername}** wird in einer Minute neu gestartet. |||| **%{servername}** wird in %{smart_count} Minuten neu gestartet.",
+        "schedule_delayed_discord": "The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} player is online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest. |||| The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} players are online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest.",
+        "schedule_delayed_forced_discord": "**%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} player still online. |||| **%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} players still online."
     },
     "kick_messages": {
         "everyone": "Alle Spieler wurden gekickt: %{reason}.",
