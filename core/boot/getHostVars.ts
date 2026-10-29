@@ -27,6 +27,7 @@ export const hostEnvVarSchemas = {
     ),
     MAX_SLOTS: z.coerce.number().int().positive(),
     QUIET_MODE: z.preprocess((val) => val === 'true', z.boolean()),
+    DISABLE_TTY_TITLE: z.preprocess((val) => val === 'true', z.boolean()),
 
     //Networking
     TXA_URL: z.string().url(),

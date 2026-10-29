@@ -58,6 +58,10 @@ The specific way to set up those variables vary from system to system, and there
     - If true, do not pipe the FXServer's stdout/stderr to txAdmin's stdout, meaning that you will only be able to see the server output by visiting the txAdmin Live Console page.
     - If enabled, server owners won't be able to disable it in `txAdmin -> Settings -> FXServer` page.
     - <mark>NOTE:</mark> We recommend that Game Server Providers enable this option.
+- **TXHOST_DISABLE_TTY_TITLE**
+    - **Default value:** `false`.
+    - If true, txAdmin will not set the terminal window title (the one showing the player count and server name).
+    - The title is already disabled automatically on Pterodactyl, ZAP-Hosting and when `TXHOST_PROVIDER_NAME` is set.
 - **TXHOST_API_TOKEN**
     - **Default value:** _undefined_.
     - **Options:** `disabled` or a string matching `/^[A-Za-z0-9_-]{16,48}$/`.

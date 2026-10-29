@@ -474,7 +474,7 @@ if (ignoreDeprecatedConfigs) {
 
 const isPterodactyl = !isWindows && process.env?.TXADMIN_ENABLE === '1';
 const isZapHosting = providerName === 'ZAP-Hosting';
-const setConsoleTitle = !(isPterodactyl || isZapHosting || providerName); //assume not a terminal
+const setConsoleTitle = !(isPterodactyl || isZapHosting || providerName || hostVars.DISABLE_TTY_TITLE); //assume not a terminal
 
 
 //FXServer Display Version
