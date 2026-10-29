@@ -1,5 +1,5 @@
 //@ts-nocheck
-import { test, expect, suite, it, vitest, vi } from 'vitest';
+import { test, expect, suite, it, vitest, vi, beforeEach, afterEach } from 'vitest';
 import { prefixMultiline, splitFirstLine, stripLastEol } from './fxsLoggerUtils';
 import ConsoleTransformer, { FORCED_EOL } from './ConsoleTransformer';
 import ConsoleLineEnum from './ConsoleLineEnum';
@@ -211,7 +211,16 @@ suite('transformer: shortcuts', () => {
 });
 
 suite('transformer: new line', () => {
-    const expectedTimeMarker = `{§${Math.floor(Date.now() / 1000).toString(16)}}`;
+    //Frozen clock, so the marker cannot change second between building the expectation and the transformer reading it
+    let expectedTimeMarker: string;
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-01-01T00:00:00.500Z'));
+        expectedTimeMarker = `{§${Math.floor(Date.now() / 1000).toString(16)}}`;
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
 
     test('single line same src', () => {
         const transformer = getPatchedTransformer();
@@ -241,7 +250,16 @@ suite('transformer: new line', () => {
 
 
 suite('transformer: postfix', () => {
-    const expectedTimeMarker = `{§${Math.floor(Date.now() / 1000).toString(16)}}`;
+    //Frozen clock, so the marker cannot change second between building the expectation and the transformer reading it
+    let expectedTimeMarker: string;
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-01-01T00:00:00.500Z'));
+        expectedTimeMarker = `{§${Math.floor(Date.now() / 1000).toString(16)}}`;
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
 
     test('same source incomplete line', () => {
         const transformer = getPatchedTransformer();

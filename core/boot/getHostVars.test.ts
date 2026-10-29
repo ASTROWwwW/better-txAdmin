@@ -1,7 +1,10 @@
-import { suite, it, expect, afterEach, vi } from 'vitest';
+import { suite, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { getHostVars } from './getHostVars';
 
 suite('getHostVars DISABLE_TTY_TITLE', () => {
+    beforeEach(() => {
+        vi.stubEnv('TXHOST_DISABLE_TTY_TITLE', undefined as any); //the dev machine might have it set
+    });
     afterEach(() => {
         vi.unstubAllEnvs();
     });

@@ -251,7 +251,7 @@ async function handleSaveLocal(ctx) {
     //Prepare body input
     const cfg = {
         name: ctx.request.body.name.trim(),
-        dataFolder: slash(path.normalize(stripServerCfgFromPath(ctx.request.body.dataFolder.trim()) + '/')),
+        dataFolder: slash(path.normalize(stripServerCfgFromPath(String(ctx.request.body.dataFolder).trim()) + '/')),
         cfgFile: slash(path.normalize(ctx.request.body.cfgFile)),
     };
 
