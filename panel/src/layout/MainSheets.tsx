@@ -3,7 +3,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ServerSidebar } from "./ServerSidebar/ServerSidebar";
 import { useGlobalMenuSheet, usePlayerlistSheet, useServerSheet } from "@/hooks/sheets";
 import { MenuNavLink, NavLink } from "@/components/MainPageLink";
-import { ClipboardCheckIcon, DoorOpenIcon, ListIcon, PieChartIcon, ScrollIcon, SettingsIcon, UserSquare2Icon, UsersIcon, ZapIcon } from 'lucide-react';
+import { ClipboardCheckIcon, DoorOpenIcon, ListIcon, MapIcon, PieChartIcon, ScrollIcon, SettingsIcon, UserSquare2Icon, UsersIcon, ZapIcon } from 'lucide-react';
 import { PlayerlistSidebar } from "./PlayerlistSidebar/PlayerlistSidebar";
 import { useAdminPerms } from "@/hooks/auth";
 import { LogoFullSquareGreen } from "@/components/Logos";
@@ -36,6 +36,9 @@ export function GlobalMenuSheet() {
                         <div className="flex flex-wrap flex-row xs:grid grid-cols-2 gap-4">
                             <MenuNavLink href="/players">
                                 <UsersIcon className="mr-2 h-4 w-4" />Players
+                            </MenuNavLink>
+                            <MenuNavLink href="/map" disabled={!hasPerm('players.spectate')}>
+                                <MapIcon className="mr-2 h-4 w-4" />Map
                             </MenuNavLink>
                             <MenuNavLink href="/history">
                                 <ScrollIcon className="mr-2 h-4 w-4" />History
