@@ -61,7 +61,8 @@ export const getMutableConvars = (isCmdLine = false) => {
             ? txConfig.whitelist.rejectionMessage.replaceAll('\n', '\\n')
             : txConfig.whitelist.rejectionMessage;
         convars.push(['sets', 'sv_allowlistInstructions', instructions]);
-    } else {
+    } else if (!isCmdLine) {
+        //NOTE: fxserver skips empty string arguments (even `""`), which makes the args count mismatch (CFX-942)
         convars.push(['sets', 'sv_allowlistInstructions', '']);
     }
 
