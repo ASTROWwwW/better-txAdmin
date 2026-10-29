@@ -92,7 +92,8 @@ const checkFileWhitelist = (rootPath: string, url: string) => {
         '/index.html',
         '/img/discord.png',
         '/img/zap_login.png',
-        '/img/zap_main.png'
+        '/img/zap_main.png',
+        '/img/map-satellite.jpg'
     ];
     return nonHashedFiles.includes(url) || url.includes('.v800.');
 }

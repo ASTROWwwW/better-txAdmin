@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { MAP_IMAGE_PATH, gameToMapRatio, isOnMap } from './mapGeo';
 import { clusterMarkers } from './clusterMarkers';
-import { clampView, getImageBox, zoomAtPoint, type MapView as ViewState } from './mapView';
+import { clampView, getImageBox, zoomAtPoint, type MapView as ViewState } from './mapViewport';
 
 export type MapPlayer = {
     netid: number;

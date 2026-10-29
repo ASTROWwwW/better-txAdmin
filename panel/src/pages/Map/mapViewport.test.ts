@@ -1,5 +1,5 @@
 import { suite, it, expect } from 'vitest';
-import { MIN_ZOOM, MAX_ZOOM, getImageBox, clampView, zoomAtPoint } from './mapView';
+import { MIN_ZOOM, MAX_ZOOM, getImageBox, clampView, zoomAtPoint } from './mapViewport';
 import { MAP_ASPECT } from './mapGeo';
 
 const size = { w: 1000, h: 600 };
