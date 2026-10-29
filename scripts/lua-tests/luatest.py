@@ -367,5 +367,250 @@ lua = shot_env()
 ask(lua, quality=-3)
 check('the quality has a floor of 0.1', abs(lua.eval('LAST_OPTS.quality') - 0.1) < 1e-9)
 
+# ---------------------------------------------------------------- live stream (smooth view of a player's screen)
+def stream_env(players=('12', '13')):
+    lua = LuaRuntime(unpack_returned_tuples=True, register_eval=False)
+    lua.execute(PRELUDE)
+    lua.execute("""
+    TX_EVENT_HANDLERS = {}
+    NOW = 1000
+    CALLBACKS = {}
+    PLAYER_NAMES = {}
+    function GetGameTimer() return NOW end
+    function GetPlayerName(id) return PLAYER_NAMES[tostring(id)] end
+    function GetCurrentResourceName() return 'monitor' end
+    function PerformHttpRequest(url, cb, method, body, headers)
+      CAPTURED[#CAPTURED + 1] = { url = url, method = method, headers = headers, body = body }
+      CALLBACKS[#CALLBACKS + 1] = cb
+    end
+    function make_req(method, path, headers)
+      local r = { method = method, path = path, headers = headers or {} }
+      r.setDataHandler = function(fn) r.handler = fn end
+      return r
+    end
+    function make_res()
+      local r = {}
+      r.writeHead = function(code, headers) r.code = code; r.headers = headers end
+      r.send = function(body) r.sent = body end
+      return r
+    end
+    """)
+    for pid in players:
+        lua.execute(f"PLAYER_NAMES['{pid}'] = 'player{pid}'")
+    lua.eval('load')(current('resource/sv_stream.lua'), 'stream')()
+    return lua
+
+TOKEN = 'tok_abcdefghijklmnop-1234'
+
+def stream_start(lua, **fields):
+    data = {'sessionId': 'sess1', 'token': TOKEN, 'netid': 12, 'fps': 12, 'width': 640, 'quality': 0.5, 'ttlMs': 600000}
+    data.update(fields)
+    tbl = lua.eval('{}')
+    for k, v in data.items(): tbl[k] = v
+    lua.eval('TX_EVENT_HANDLERS.screenStreamStart')(tbl)
+
+def stream_post(lua, token=TOKEN, body='/9j/AAAA', method='POST', headers=None, path=None):
+    req = lua.eval('make_req')(method, path or f'/stream/{token}', lua.eval('{}') if headers is None else headers)
+    res = lua.eval('make_res')()
+    lua.eval('TX_STREAM_HTTP')(req, res)
+    if req['handler'] is not None and body is not None:
+        req['handler'](body)
+    return req, res
+
+def client_events(lua):
+    ev = lua.eval('EVENTS')
+    return [(ev[i][1], ev[i][2], ev[i][3]) for i in range(1, len(ev) + 1)]
+
+print('[sv_stream.lua | smooth live view]')
+lua = stream_env()
+check('the core can start and stop through the txaEvent whitelist handlers', lua.eval('type(TX_EVENT_HANDLERS.screenStreamStart)') == 'function' and lua.eval('type(TX_EVENT_HANDLERS.screenStreamStop)') == 'function')
+stream_start(lua)
+ev = lua.eval('EVENTS')
+check('the player gets the token and the capture settings, nothing else (no url)', len(ev) == 1 and ev[1][1] == 'txcl:screenStreamStart' and ev[1][2] == 12 and ev[1][3]['token'] == TOKEN and ev[1][3]['fps'] == 12 and ev[1][3]['width'] == 640 and abs(ev[1][3]['quality'] - 0.5) < 1e-9 and ev[1][3]['url'] is None, client_events(lua))
+
+# settings are clamped again here, the core is trusted but the values go to a game client
+lua = stream_env()
+stream_start(lua, fps=500, width=99999, quality=9, ttlMs=99999999)
+cfg = lua.eval('EVENTS')[1][3]
+check('fps, width, quality and lifetime are capped', cfg['fps'] == 20 and cfg['width'] == 1280 and abs(cfg['quality'] - 0.8) < 1e-9 and cfg['ttlMs'] == 660000, dict(cfg))
+lua = stream_env()
+stream_start(lua, fps=0, width=1, quality=-1, ttlMs=5)
+cfg = lua.eval('EVENTS')[1][3]
+check('and have a floor', cfg['fps'] == 5 and cfg['width'] == 320 and abs(cfg['quality'] - 0.2) < 1e-9 and cfg['ttlMs'] == 1000, dict(cfg))
+
+for label, fields in [
+    ('a session id that is not a string', {'sessionId': 5}),
+    ('an empty session id', {'sessionId': ''}),
+    ('a session id that is too long', {'sessionId': 'x' * 65}),
+    ('a token that is too short', {'token': 'abc'}),
+    ('a token with characters that do not belong in a path', {'token': 'abcdefghijklmnop/../etc'}),
+    ('a token that is not a string', {'token': 1234567890123456}),
+    ('a netid that is not a number', {'netid': 'abc'}),
+    ('a player who left', {'netid': 99}),
+]:
+    lua = stream_env()
+    stream_start(lua, **fields)
+    check(f'{label} is ignored', len(lua.eval('EVENTS')) == 0, client_events(lua))
+
+# the upload endpoint
+lua = stream_env()
+stream_start(lua)
+req, res = stream_post(lua)
+cap = lua.eval('CAPTURED')
+body = pyjson.loads(cap[1]['body'])
+check('a frame is forwarded to the intercom with the server token and the session id the server chose', len(cap) == 1 and cap[1]['url'] == 'http://127.0.0.1:40120/intercom/screenstream' and cap[1]['method'] == 'POST' and body == {'txAdminToken': 'secrettoken', 'sessionId': 'sess1', 'frame': '/9j/AAAA'}, body)
+check('the player is not answered before the core answered', res['sent'] is None)
+lua.eval('CALLBACKS[1]')(200, '{"ok":true}')
+check('then it gets ok, with open CORS so the game page can read it, and nothing cached', res['code'] == 200 and res['sent'] == '{"ok":true}' and res['headers']['Access-Control-Allow-Origin'] == '*' and res['headers']['Cache-Control'] == 'no-store' and res['headers']['X-Content-Type-Options'] == 'nosniff', (res['code'], res['sent']))
+
+lua = stream_env()
+stream_start(lua)
+req, res = stream_post(lua)
+lua.eval('CALLBACKS[1]')(200, '{"stop":true}')
+check('when the core says stop, the player is told to stop', res['sent'] == '{"stop":true}', res['sent'])
+req, res = stream_post(lua)
+check('and the token no longer works', res['code'] == 404 and res['sent'] == '{"stop":true}' and len(lua.eval('CAPTURED')) == 1, res['code'])
+
+lua = stream_env()
+stream_start(lua)
+req, res = stream_post(lua)
+lua.eval('CALLBACKS[1]')(500, 'boom')
+check('when the core cannot be reached, the player is told to stop too', res['sent'] == '{"stop":true}', res['sent'])
+
+lua = stream_env()
+req, res = stream_post(lua)
+check('an unknown token gets 404 and the stop signal, nothing is forwarded', res['code'] == 404 and res['sent'] == '{"stop":true}' and len(lua.eval('CAPTURED')) == 0)
+for path in ['/stream/', '/stream/../monitor/x', '/stream/abc/def', '/stream/%s?x=1' % TOKEN, '/streamx/' + TOKEN]:
+    lua = stream_env()
+    stream_start(lua)
+    req, res = stream_post(lua, path=path)
+    check(f'the path {path} is not a stream upload', len(lua.eval('CAPTURED')) == 0 and res['code'] in (404, 405), (path, res['code']))
+
+lua = stream_env()
+stream_start(lua)
+req, res = stream_post(lua, method='OPTIONS', body=None)
+check('a preflight gets 204 with the allowed method and headers', res['code'] == 204 and res['headers']['Access-Control-Allow-Origin'] == '*' and 'POST' in res['headers']['Access-Control-Allow-Methods'] and 'Content-Type' in res['headers']['Access-Control-Allow-Headers'])
+req, res = stream_post(lua, method='GET', body=None)
+check('GET is refused with 405', res['code'] == 405 and len(lua.eval('CAPTURED')) == 0)
+
+# size limits
+lua = stream_env()
+stream_start(lua)
+req, res = stream_post(lua, body='A' * 400001)
+check('a body above 400000 characters is refused and not forwarded', res['code'] == 413 and len(lua.eval('CAPTURED')) == 0, res['code'])
+lua = stream_env()
+stream_start(lua)
+req, res = stream_post(lua, headers=lua.eval('{ ["content-length"] = "5000000" }'), body=None)
+check('a content-length above the limit is refused before the body is read', res['code'] == 413 and req['handler'] is None)
+req, res = stream_post(lua, headers=lua.eval('{ ["Content-Length"] = "5000000" }'), body=None)
+check('in any casing of the header', res['code'] == 413 and req['handler'] is None)
+lua = stream_env()
+stream_start(lua)
+req, res = stream_post(lua, body='')
+check('an empty body is not forwarded', len(lua.eval('CAPTURED')) == 0 and res['code'] == 413)
+
+# pacing
+lua = stream_env()
+stream_start(lua)
+stream_post(lua)
+lua.eval('CALLBACKS[1]')(200, '{"ok":true}')
+lua.execute('NOW = NOW + 10')
+req, res = stream_post(lua)
+check('a second frame less than 30 ms after the first is acked and dropped', res['sent'] == '{"ok":true}' and len(lua.eval('CAPTURED')) == 1, res['sent'])
+lua.execute('NOW = NOW + 40')
+req, res = stream_post(lua)
+check('after 30 ms it is forwarded again', len(lua.eval('CAPTURED')) == 2)
+req2, res2 = stream_post(lua)
+lua.execute('NOW = NOW + 100')
+req3, res3 = stream_post(lua)
+check('while a frame is still being forwarded, the next one is dropped (no queue)', len(lua.eval('CAPTURED')) == 2 and res3['sent'] == '{"ok":true}', len(lua.eval('CAPTURED')))
+
+# lifetime
+lua = stream_env()
+stream_start(lua, ttlMs=60000)
+lua.execute('NOW = NOW + 60001')
+req, res = stream_post(lua)
+check('a token does not work after its lifetime', res['code'] in (404, 410) and res['sent'] == '{"stop":true}' and len(lua.eval('CAPTURED')) == 0, res['code'])
+
+lua = stream_env()
+stream_start(lua)
+lua.eval('TX_EVENT_HANDLERS.screenStreamStop')(lua.eval('{ sessionId = "sess1" }'))
+ev = lua.eval('EVENTS')
+check('stopping tells the player game to stop', len(ev) == 2 and ev[2][1] == 'txcl:screenStreamStop' and ev[2][2] == 12, client_events(lua))
+req, res = stream_post(lua)
+check('and the token is dead', res['code'] == 404 and len(lua.eval('CAPTURED')) == 0)
+lua.eval('TX_EVENT_HANDLERS.screenStreamStop')(lua.eval('{ sessionId = "unknown" }'))
+lua.eval('TX_EVENT_HANDLERS.screenStreamStop')(lua.eval('{ sessionId = 5 }'))
+check('stopping something unknown, or with a bad id, does nothing', len(lua.eval('EVENTS')) == 2)
+
+lua = stream_env()
+stream_start(lua)
+stream_start(lua, sessionId='sess2', token='tok_second_abcdefghijk_1')
+req, res = stream_post(lua)
+check('a new stream on the same player replaces the old one (old token dead)', res['code'] == 404)
+req, res = stream_post(lua, token='tok_second_abcdefghijk_1')
+check('and the new one works', len(lua.eval('CAPTURED')) == 1)
+check('the old stream was stopped on the player game', ('txcl:screenStreamStop', 12) in [(a, b) for a, b, c in client_events(lua)], client_events(lua))
+
+lua = stream_env(players=tuple(str(i) for i in range(1, 20)))
+for i in range(1, 12):
+    stream_start(lua, sessionId=f's{i}', token=f'tok_number_{i:02d}_abcdefghijk', netid=i)
+started = [e for e in client_events(lua) if e[0] == 'txcl:screenStreamStart']
+check('at most 8 streams run at once on the server', len(started) == 8, len(started))
+
+# the client side: the game builds the url itself, from its own server endpoint
+def client_stream_env(endpoint='1.2.3.4:30120'):
+    lua = LuaRuntime(unpack_returned_tuples=True, register_eval=False)
+    lua.execute(PRELUDE)
+    lua.execute("""
+    NUI = {}
+    function sendMenuMessage(action, data) NUI[#NUI + 1] = { action = action, data = data } end
+    function GetCurrentServerEndpoint() return %s end
+    function GetCurrentResourceName() return 'monitor' end
+    """ % (("'" + endpoint + "'") if endpoint is not None else 'nil'))
+    lua.eval('load')(current('resource/cl_stream.lua'), 'cl_stream')()
+    return lua
+
+def cl_start(lua, **fields):
+    data = {'token': TOKEN, 'fps': 12, 'width': 640, 'quality': 0.5, 'ttlMs': 600000}
+    data.update(fields)
+    tbl = lua.eval('{}')
+    for k, v in data.items(): tbl[k] = v
+    lua.eval('HANDLERS["txcl:screenStreamStart"]')(tbl)
+
+print('[cl_stream.lua | the game side of the live view]')
+lua = client_stream_env()
+cl_start(lua)
+nui = lua.eval('NUI')
+check('the menu page gets the url made from the server endpoint, this resource and the token', len(nui) == 1 and nui[1]['action'] == 'screenStreamStart' and nui[1]['data']['url'] == f'http://1.2.3.4:30120/monitor/stream/{TOKEN}', nui[1]['data']['url'] if len(nui) else None)
+check('with the capture settings', nui[1]['data']['fps'] == 12 and nui[1]['data']['width'] == 640 and abs(nui[1]['data']['quality'] - 0.5) < 1e-9 and nui[1]['data']['ttlMs'] == 600000)
+lua.eval('HANDLERS["txcl:screenStreamStop"]')()
+nui = lua.eval('NUI')
+check('stopping reaches the menu page', len(nui) == 2 and nui[2]['action'] == 'screenStreamStop')
+for label, fields in [('a token that is too short', {'token': 'abc'}), ('a token with a slash in it', {'token': 'abcdefghijklmnop/../x'}), ('a token that is not a string', {'token': 5})]:
+    lua = client_stream_env()
+    cl_start(lua, **fields)
+    check(f'{label} is ignored', len(lua.eval('NUI')) == 0)
+lua = client_stream_env()
+lua.eval('HANDLERS["txcl:screenStreamStart"]')('not a table')
+check('anything that is not a table is ignored', len(lua.eval('NUI')) == 0)
+lua = client_stream_env(endpoint=None)
+cl_start(lua)
+check('without a server endpoint nothing is started', len(lua.eval('NUI')) == 0)
+lua = client_stream_env()
+cl_start(lua, fps=500, width=99999, quality=9, ttlMs=99999999)
+d = lua.eval('NUI')[1]['data']
+check('the settings are capped again on the game side', d['fps'] == 20 and d['width'] == 1280 and abs(d['quality'] - 0.8) < 1e-9 and d['ttlMs'] == 660000, dict(d))
+lua = client_stream_env()
+tbl = lua.eval('{ token = "%s", url = "http://evil.example/x", fps = 12 }' % TOKEN)
+lua.eval('HANDLERS["txcl:screenStreamStart"]')(tbl)
+check('a url sent by the server (or another resource) is never used', lua.eval('NUI')[1]['data']['url'] == f'http://1.2.3.4:30120/monitor/stream/{TOKEN}')
+
+# the server only wires the route when the file exists
+sv_main = current('resource/sv_main.lua')
+check('sv_main.lua sends /stream/ requests to the stream handler before anything else', "req.path:sub(1, 8) == '/stream/'" in sv_main and 'TX_STREAM_HTTP' in sv_main)
+check('sv_main.lua lists both stream events in the whitelist', 'screenStreamStart = false' in sv_main and 'screenStreamStop = false' in sv_main)
+check('the manifest loads sv_stream.lua and cl_stream.lua', "'resource/sv_stream.lua'" in current('fxmanifest.lua') and "'resource/cl_stream.lua'" in current('fxmanifest.lua'))
+
 print(f'\n{PASS} checks passed, {FAIL} failed')
 sys.exit(1 if FAIL else 0)

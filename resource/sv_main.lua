@@ -78,6 +78,11 @@ end
 -- HTTP request handler
 local notFoundResponse = json.encode({ error = 'route not found' })
 local function handleHttp(req, res)
+    -- Frames of the live view, sent by the game of a player (defined in sv_stream.lua)
+    if TX_STREAM_HTTP and req.path:sub(1, 8) == '/stream/' then
+        return TX_STREAM_HTTP(req, res)
+    end
+
     res.writeHead(200, { ["Content-Type"] = "application/json" })
 
     if req.path == '/stats.json' then
@@ -173,6 +178,8 @@ TX_EVENT_HANDLERS = {
     configChanged = false, -- sv_ctx.lua
     playerPositionsWanted = false, -- sv_playerlist.lua
     screenshotRequested = false, -- sv_screenshot.lua
+    screenStreamStart = false, -- sv_stream.lua
+    screenStreamStop = false, -- sv_stream.lua
 
     -- Known NO-OP
     actionRevoked = false,
