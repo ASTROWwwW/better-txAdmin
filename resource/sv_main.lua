@@ -172,6 +172,7 @@ TX_EVENT_HANDLERS = {
     adminsUpdated = false, -- sv_admins.lua
     configChanged = false, -- sv_ctx.lua
     playerPositionsWanted = false, -- sv_playerlist.lua
+    screenshotRequested = false, -- sv_screenshot.lua
 
     -- Known NO-OP
     actionRevoked = false,

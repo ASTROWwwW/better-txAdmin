@@ -342,6 +342,7 @@ export default class FxRunner {
             txCore.fxResources.handleServerClose();
             txCore.fxPlayerlist.handleServerClose(debugInfo.mutex);
             txCore.fxPlayerPositions.handleServerClose();
+            txCore.fxScreenshots.handleServerClose();
             txCore.metrics.svRuntime.logServerClose(reasonString);
             txCore.discordBot.sendAnnouncement({
                 type: messageColor,

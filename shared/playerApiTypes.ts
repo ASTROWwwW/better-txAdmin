@@ -102,3 +102,15 @@ export type PlayersTableSearchResp = {
     players: PlayersTablePlayerType[];
     hasReachedEnd: boolean;
 } | GenericApiErrorResp;
+
+
+/**
+ * Screenshot of a player's game screen (player modal, "View screen")
+ */
+export type ApiPlayerScreenshotResp = {
+    image: string; //data:image/jpeg;base64,... or png
+    ts: number;
+} | {
+    error: string;
+    code: string; //a ScreenshotErrorCode, no_permission or unknown
+};

@@ -9,6 +9,7 @@ import { SYM_CURRENT_MUTEX } from '@lib/symbols';
 import { z } from 'zod';
 import { shortenId } from '@shared/utils';
 import { summarizeIdsArray } from '@lib/player/idUtils';
+import { handleScreenshot, handleScreenshotStop } from './screenshotActions';
 const console = consoleFactory(modulename);
 
 
@@ -55,6 +56,10 @@ export default async function PlayerActions(ctx: AuthedCtx) {
         return sendTypedResp(await handleDirectMessage(ctx, player));
     } else if (action === 'kick') {
         return sendTypedResp(await handleKick(ctx, player));
+    } else if (action === 'screenshot') {
+        return ctx.send(await handleScreenshot(ctx, player));
+    } else if (action === 'screenshotStop') {
+        return ctx.send(await handleScreenshotStop(ctx, player));
     } else {
         return sendTypedResp({ error: 'unknown action' });
     }

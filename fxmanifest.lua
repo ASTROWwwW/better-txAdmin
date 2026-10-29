@@ -28,6 +28,7 @@ server_scripts {
     'resource/sv_logger.lua',
     'resource/sv_resources.lua',
     'resource/sv_playerlist.lua',
+    'resource/sv_screenshot.lua',
     'resource/sv_ctx.lua',
     'resource/sv_initialData.lua',
     'resource/menu/server/sv_webpipe.lua',

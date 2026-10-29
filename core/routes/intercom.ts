@@ -35,6 +35,9 @@ export default async function Intercom(ctx: InitializedCtx) {
             return ctx.utils.error(400, 'Invalid Request');
         }
         txCore.fxResources.tmpUpdateResourceList(postData.resources);
+    } else if (scope == 'screenshot') {
+        txCore.fxScreenshots.handleResult(postData);
+        return ctx.send({ success: true });
     } else {
         return ctx.send({
             type: 'danger',

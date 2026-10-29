@@ -39,7 +39,7 @@ function AddEventHandler(name, fn) LOCAL_HANDLERS[name] = fn end
 function CreateThread(fn) THREADS[#THREADS + 1] = fn end
 function Wait() coroutine.yield() end
 function PerformHttpRequest(url, cb, method, body, headers, opts)
-  CAPTURED[#CAPTURED + 1] = { url = url, method = method, headers = headers }
+  CAPTURED[#CAPTURED + 1] = { url = url, method = method, headers = headers, body = body }
 end
 function GetConvarBool(n, d) return d end
 function GetConvar(n, d) return d end
@@ -281,6 +281,91 @@ for mode in ['off']:
     lua.eval('TX_EVENT_HANDLERS.playerPositionsWanted')(lua.eval('{ ttlMs = 20000 }'))
     lua.eval('run_cycle')()
     check(f'nothing is reported without onesync ({mode})', position_traces(lua) == [])
+
+# ---------------------------------------------------------------- screenshots (view a player's screen from the panel)
+import json as pyjson
+
+def shot_env(started=True, players=('12',), export='ok', quality_log=None):
+    lua = LuaRuntime(unpack_returned_tuples=True, register_eval=False)
+    lua.execute(PRELUDE)
+    lua.execute("""
+    TX_EVENT_HANDLERS = {}
+    STARTED = %s
+    EXPORT_MODE = '%s'
+    LAST_OPTS = nil
+    PLAYER_NAMES = {}
+    function GetResourceState(name) if name == 'screenshot-basic' and STARTED then return 'started' end return 'missing' end
+    function GetPlayerName(id) return PLAYER_NAMES[tostring(id)] end
+    exports = setmetatable({}, { __index = function(_, name)
+      if name ~= 'screenshot-basic' then return nil end
+      return setmetatable({}, { __index = function(_, fn)
+        if fn ~= 'requestClientScreenshot' then return nil end
+        return function(_self, netid, opts, cb)
+          LAST_OPTS = opts
+          if EXPORT_MODE == 'throws' then error('boom') end
+          if EXPORT_MODE == 'error' then return cb('some client error', nil) end
+          if EXPORT_MODE == 'huge' then return cb(false, 'data:image/jpeg;base64,' .. string.rep('A', 600001)) end
+          if EXPORT_MODE == 'nodata' then return cb(false, nil) end
+          return cb(false, 'data:image/jpeg;base64,/9j/AAAA')
+        end
+      end })
+    end })
+    """ % ('true' if started else 'false', export))
+    for pid in players:
+        lua.execute(f"PLAYER_NAMES['{pid}'] = 'player{pid}'")
+    lua.eval('load')(current('resource/sv_screenshot.lua'), 'screenshot')()
+    return lua
+
+def posts(lua):
+    cap = lua.eval('CAPTURED')
+    out = []
+    for i in range(1, len(cap) + 1):
+        out.append((cap[i]['url'], cap[i]['method'], pyjson.loads(cap[i]['body'])))
+    return out
+
+def ask(lua, **fields):
+    data = {'reqId': 'req1234567890', 'netid': 12, 'quality': 0.4}
+    data.update(fields)
+    tbl = lua.eval('{}')
+    for k, v in data.items(): tbl[k] = v
+    lua.eval('TX_EVENT_HANDLERS.screenshotRequested')(tbl)
+
+print('[sv_screenshot.lua | screenshots for the panel]')
+lua = shot_env()
+check('the core can ask through the txaEvent whitelist handler', lua.eval('type(TX_EVENT_HANDLERS.screenshotRequested)') == 'function')
+ask(lua)
+p = posts(lua)
+check('the frame is posted to the intercom with the token and the request id', len(p) == 1 and p[0][0] == 'http://127.0.0.1:40120/intercom/screenshot' and p[0][1] == 'POST' and p[0][2].get('txAdminToken') == 'secrettoken' and p[0][2].get('reqId') == 'req1234567890', p)
+check('the image is sent as is, without an error', p[0][2].get('image') == 'data:image/jpeg;base64,/9j/AAAA' and 'error' not in p[0][2], p[0][2])
+check('the capture is asked as a jpeg with the quality of the core', lua.eval('LAST_OPTS.encoding') == 'jpg' and abs(lua.eval('LAST_OPTS.quality') - 0.4) < 1e-9)
+
+lua = shot_env(started=False)
+ask(lua)
+p = posts(lua)
+check('without screenshot-basic the core is told so', len(p) == 1 and p[0][2].get('error') == 'screenshot_basic_missing', p)
+
+lua = shot_env(players=())
+ask(lua)
+p = posts(lua)
+check('a player who left is reported as gone, nothing is captured', len(p) == 1 and p[0][2].get('error') == 'player_gone' and lua.eval('LAST_OPTS') is None, p)
+
+for mode in ['error', 'throws', 'huge', 'nodata']:
+    lua = shot_env(export=mode)
+    ask(lua)
+    p = posts(lua)
+    check(f'a capture that fails ({mode}) is reported as capture_failed, never relayed', len(p) == 1 and p[0][2].get('error') == 'capture_failed' and 'image' not in p[0][2], p)
+
+for label, fields in [('a request id that is not a string', {'reqId': 5}), ('a request id that is too long', {'reqId': 'x' * 65}), ('a netid that is not a number', {'netid': 'abc'})]:
+    lua = shot_env()
+    ask(lua, **fields)
+    check(f'{label} is ignored', posts(lua) == [])
+
+lua = shot_env()
+ask(lua, quality=5)
+check('the quality is capped at 0.9', abs(lua.eval('LAST_OPTS.quality') - 0.9) < 1e-9)
+lua = shot_env()
+ask(lua, quality=-3)
+check('the quality has a floor of 0.1', abs(lua.eval('LAST_OPTS.quality') - 0.1) < 1e-9)
 
 print(f'\n{PASS} checks passed, {FAIL} failed')
 sys.exit(1 if FAIL else 0)
