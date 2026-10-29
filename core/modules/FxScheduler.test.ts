@@ -95,6 +95,113 @@ suite('FxScheduler delayed restarts', () => {
         expect(restartSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps a delayed restart when a watched config is saved, and releases it once players leave', async () => {
+        build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+        players.count = 3;
+        await tick();
+        scheduler.handleConfigUpdate({} as any);
+        expect(scheduler.getStatus().nextIsDelayed).toBe(true);
+        players.count = 0;
+        await tick();
+        expect(restartSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('restarts at once when the delay option is turned off while a restart is waiting', async () => {
+        build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+        players.count = 3;
+        await tick();
+        await tick(2);
+        expect(restartSpy).not.toHaveBeenCalled();
+        txConfig.restarter.onlyWhenEmpty = false;
+        scheduler.handleConfigUpdate({} as any);
+        expect(restartSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('restarts at once when the maximum delay is lowered below the time already waited', async () => {
+        build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+        players.count = 3;
+        await tick();
+        await tick(5);
+        txConfig.restarter.maxRestartDelayMinutes = 3;
+        scheduler.handleConfigUpdate({} as any);
+        expect(restartSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('a config save does not restart the maximum delay clock', async () => {
+        build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 3 });
+        players.count = 3;
+        await tick(); //delayed at 12:00:30
+        await tick(2); //12:02:30
+        scheduler.handleConfigUpdate({} as any);
+        expect(scheduler.getStatus().nextIsDelayed).toBe(true);
+        await tick(); //12:03:30 -> 3 minutes since the first attempt
+        expect(restartSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops the delayed restart when its time is no longer in the schedule', async () => {
+        build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+        players.count = 3;
+        await tick();
+        txConfig.restarter.schedule = ['18:00'];
+        scheduler.handleConfigUpdate({} as any);
+        expect(scheduler.getStatus().nextIsDelayed).toBe(false);
+        players.count = 0;
+        await tick();
+        expect(restartSpy).not.toHaveBeenCalled();
+    });
+
+    it('drops a delayed temporary restart on a config save, like it drops any temporary schedule', async () => {
+        build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+        scheduler.setNextTempSchedule('12:00'); //same time as the configured one
+        players.count = 3;
+        await tick();
+        await tick(2);
+        expect(scheduler.getStatus().nextIsDelayed).toBe(true);
+        scheduler.handleConfigUpdate({} as any);
+        expect(scheduler.getStatus().nextIsDelayed).toBe(false);
+        expect(scheduler.getStatus().nextIsTemp).toBe(false);
+    });
+
+    it('does not restart twice in the same minute when another slot lands on it', async () => {
+        build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+        txConfig.restarter.schedule = ['12:00', '12:05'];
+        players.count = 3;
+        await tick(); //12:00:30, delayed
+        players.count = 0;
+        vi.setSystemTime(new Date(2026, 9, 29, 12, 5, 10));
+        await scheduler.checkSchedule(); //releases the delayed restart
+        expect(restartSpy).toHaveBeenCalledTimes(1);
+        scheduler.handleConfigUpdate({} as any); //admin saves a setting in the same minute
+        await scheduler.checkSchedule();
+        expect(restartSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancelling a delayed restart really cancels it, even in the same minute', async () => {
+        build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+        players.count = 3;
+        await tick();
+        scheduler.setNextSkip(true, 'admin');
+        players.count = 0;
+        await scheduler.checkSchedule();
+        expect(restartSpy).not.toHaveBeenCalled();
+        expect(scheduler.getStatus().nextIsDelayed).toBe(false);
+    });
+
+    it('refuses a temporary schedule while a restart is waiting for players', async () => {
+        build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
+        players.count = 3;
+        await tick();
+        expect(() => scheduler.setNextTempSchedule('+10')).toThrow('delayed');
+    });
+
+    it('skips the scheduled restart while the server is still in its boot grace period', async () => {
+        build({ onlyWhenEmpty: false, maxRestartDelayMinutes: 30 });
+        txConfig.restarter.bootGracePeriod = 45;
+        txCore.fxRunner.child.uptime = 10_000;
+        await tick();
+        expect(restartSpy).not.toHaveBeenCalled();
+    });
+
     it('forgets the delayed restart when the server closes', async () => {
         build({ onlyWhenEmpty: true, maxRestartDelayMinutes: 30 });
         players.count = 4;

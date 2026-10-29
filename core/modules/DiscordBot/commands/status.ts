@@ -85,7 +85,9 @@ export const generateStatusMessage = (
         const tempFlag = (schedule.nextIsTemp) ? '(tmp)' : '';
         const relativeTime = msToShortishDuration(schedule.nextRelativeMs);
         const isLessThanMinute = schedule.nextRelativeMs < 60_000;
-        if (isLessThanMinute) {
+        if (schedule.nextIsDelayed) {
+            placeholders.nextScheduledRestart = `delayed, waiting for players ${tempFlag}`;
+        } else if (isLessThanMinute) {
             placeholders.nextScheduledRestart = `right now ${tempFlag}`;
         } else {
             placeholders.nextScheduledRestart = `in ${relativeTime} ${tempFlag}`;

@@ -5,7 +5,7 @@ import { FxMonitorHealth } from '@shared/enums';
 
 const embedJson = JSON.stringify({ title: 'Server', description: '{{statusString}}' });
 
-const stubRuntime = (whitelistMode: string, health = FxMonitorHealth.ONLINE) => {
+const stubRuntime = (whitelistMode: string, health = FxMonitorHealth.ONLINE, schedule: any = { nextRelativeMs: null }) => {
     vi.stubGlobal('txConfig', {
         general: { serverName: 'Test' },
         whitelist: { mode: whitelistMode },
@@ -15,7 +15,7 @@ const stubRuntime = (whitelistMode: string, health = FxMonitorHealth.ONLINE) => 
         cacheStore: { get: () => 'abc123' },
         fxMonitor: { status: { health, uptime: 0 } },
         fxPlayerlist: { onlineCount: 0 },
-        fxScheduler: { getStatus: () => ({ nextRelativeMs: null }) },
+        fxScheduler: { getStatus: () => schedule },
     });
 };
 
@@ -48,5 +48,15 @@ suite('generateStatusMessage maintenance status', () => {
         stubRuntime('adminOnly', FxMonitorHealth.OFFLINE);
         const embed = generateStatusMessage(embedJson, '{}').embeds[0];
         expect(embed.data.description).not.toBe('🟠 Maintenance');
+    });
+
+    it('does not say a delayed restart is happening right now', () => {
+        stubRuntime('disabled', FxMonitorHealth.ONLINE, {
+            nextRelativeMs: -120_000, nextSkip: false, nextIsTemp: false, nextIsDelayed: true,
+        });
+        const embedJsonNext = JSON.stringify({ title: 'Server', description: '{{nextScheduledRestart}}' });
+        const embed = generateStatusMessage(embedJsonNext, '{}').embeds[0];
+        expect(embed.data.description).toContain('delayed');
+        expect(embed.data.description).not.toContain('right now');
     });
 });

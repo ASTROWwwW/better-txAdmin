@@ -55,6 +55,7 @@ export default class FxScheduler {
     private nextSkip: number | false = false;
     private pendingDelayedRestart: RestartInfo | false = false;
     private pendingDelayedRestartSince: number | false = false;
+    private lastRestartMinuteTs: number | false = false;
 
     constructor() {
         //Initial check to update status
@@ -72,14 +73,29 @@ export default class FxScheduler {
 
     /**
      * Refresh configs, resets skip and temp scheduled, runs checkSchedule.
+     * A restart that is waiting for players survives (and keeps counting its delay) as long as
+     * its time is still in the configured schedule, the new options are applied to it right away.
      */
     handleConfigUpdate(updatedConfigs: UpdateConfigKeySet) {
         this.nextSkip = false;
+        const pendingIsTemp = !!this.nextTempSchedule;
         this.nextTempSchedule = false;
-        this.pendingDelayedRestart = false;
-        this.pendingDelayedRestartSince = false;
+        if (this.pendingDelayedRestart && (pendingIsTemp || !this.isConfiguredTime(this.pendingDelayedRestart.string))) {
+            this.pendingDelayedRestart = false;
+            this.pendingDelayedRestartSince = false;
+        }
         this.checkSchedule();
         txCore.webServer.webSocket.pushRefresh('status');
+    }
+
+
+    /**
+     * Checks if a HH:MM string is part of the schedule in the config.
+     */
+    private isConfiguredTime(timeString: string) {
+        if (!Array.isArray(txConfig.restarter.schedule) || !txConfig.restarter.schedule.length) return false;
+        const { valid } = parseSchedule(txConfig.restarter.schedule);
+        return valid.some((t) => t.string === timeString);
     }
 
 
@@ -146,6 +162,7 @@ export default class FxScheduler {
             if (this.pendingDelayedRestart) {
                 prevMinuteFloorTs = this.pendingDelayedRestart.minuteFloorTs;
                 temporary = !!this.nextTempSchedule;
+                this.nextSkip = prevMinuteFloorTs; //so the checkSchedule below, still in that minute, does not restart
                 this.pendingDelayedRestart = false;
                 this.pendingDelayedRestartSince = false;
                 this.nextTempSchedule = false;
@@ -192,6 +209,9 @@ export default class FxScheduler {
     setNextTempSchedule(timeString: string) {
         //Process input
         if (typeof timeString !== 'string') throw new Error('expected string');
+        if (this.pendingDelayedRestart) {
+            throw new Error('A scheduled restart is delayed, waiting for the players to leave. Cancel it or wait for it before setting a new one.');
+        }
         const thisMinuteTs = new Date().setSeconds(0, 0);
         let scheduledString, scheduledMinuteFloorTs;
 
@@ -280,6 +300,17 @@ export default class FxScheduler {
 
         //Checking if server restart or warning time
         if (nextDistMins === 0) {
+            //Several checks can land in the same minute (config save, skip toggle), only restart once
+            if (this.lastRestartMinuteTs === thisMinuteTs) return;
+
+            //Check if server is in boot cooldown
+            const processUptime = Math.floor((txCore.fxRunner.child?.uptime ?? 0) / 1000);
+            if (processUptime < txConfig.restarter.bootGracePeriod) {
+                console.verbose.log(`Server is in boot cooldown, skipping scheduled restart.`);
+                this.nextTempSchedule = false;
+                return;
+            }
+
             //Delay the restart if the server is not empty
             if (txConfig.restarter.onlyWhenEmpty && txCore.fxPlayerlist.onlineCount > 0) {
                 console.warn(`Delaying scheduled restart at ${nextRestart.string} because there are players online.`);
@@ -289,17 +320,11 @@ export default class FxScheduler {
             }
 
             //restart server
+            this.lastRestartMinuteTs = thisMinuteTs;
             this.triggerServerRestart(
                 `scheduled restart at ${nextRestart.string}`,
                 txCore.translator.t('restarter.schedule_reason', { time: nextRestart.string }),
             );
-
-            //Check if server is in boot cooldown
-            const processUptime = Math.floor((txCore.fxRunner.child?.uptime ?? 0) / 1000);
-            if (processUptime < txConfig.restarter.bootGracePeriod) {
-                console.verbose.log(`Server is in boot cooldown, skipping scheduled restart.`);
-                return;
-            }
 
             //reset next scheduled
             this.nextTempSchedule = false;
@@ -336,7 +361,10 @@ export default class FxScheduler {
         if (!this.pendingDelayedRestart || !this.pendingDelayedRestartSince) return;
         const onlineCount = txCore.fxPlayerlist.onlineCount;
         const delayedMinutes = Math.floor((Date.now() - this.pendingDelayedRestartSince) / 60_000);
-        if (onlineCount > 0 && delayedMinutes < txConfig.restarter.maxRestartDelayMinutes) {
+        const stillWaiting = txConfig.restarter.onlyWhenEmpty
+            && onlineCount > 0
+            && delayedMinutes < txConfig.restarter.maxRestartDelayMinutes;
+        if (stillWaiting) {
             console.verbose.log(`Restart still delayed, ${onlineCount} players online.`);
             return;
         }
@@ -345,6 +373,7 @@ export default class FxScheduler {
         this.pendingDelayedRestart = false;
         this.pendingDelayedRestartSince = false;
         this.nextTempSchedule = false;
+        this.lastRestartMinuteTs = new Date().setSeconds(0, 0);
         this.triggerServerRestart(
             `scheduled restart at ${restartInfo.string} (delayed)`,
             txCore.translator.t('restarter.schedule_reason', { time: restartInfo.string }),
