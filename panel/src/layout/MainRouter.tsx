@@ -12,6 +12,7 @@ import NotFound from "@/pages/NotFound";
 import TestingPage from "@/pages/TestingPage/TestingPage";
 import LiveConsolePage from "@/pages/LiveConsole/LiveConsolePage";
 import PlayersPage from "@/pages/Players/PlayersPage";
+import MapPage from "@/pages/Map/MapPage";
 import HistoryPage from "@/pages/History/HistoryPage";
 import BanTemplatesPage from "@/pages/BanTemplates/BanTemplatesPage";
 import SystemLogPage from "@/pages/SystemLogPage";
@@ -37,6 +38,12 @@ const allRoutes: RouteType[] = [
         path: '/players',
         title: 'Players',
         Page: <PlayersPage />
+    },
+    {
+        path: '/map',
+        title: 'Live Map',
+        permission: 'players.spectate',
+        Page: <MapPage />
     },
     {
         path: '/history',

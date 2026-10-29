@@ -9,7 +9,9 @@
         "partial_hang_warn_discord": "Din cauza unei întreruperi parțiale, **%{servername}** se va restarta într-un minut.",
         "schedule_reason": "restartare programata la %{time}",
         "schedule_warn": "Acest server este programat sa se restarteze in %{smart_count} minut. Va rugam sa va deconctati. |||| Acest server este programat sa se restarteze in %{smart_count} minute.",
-        "schedule_warn_discord": "**%{servername}** este programat sa se restarteze in %{smart_count} minut. |||| **%{servername}** este programat sa se restarteze in %{smart_count} minute."
+        "schedule_warn_discord": "**%{servername}** este programat sa se restarteze in %{smart_count} minut. |||| **%{servername}** este programat sa se restarteze in %{smart_count} minute.",
+        "schedule_delayed_discord": "The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} player is online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest. |||| The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} players are online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest.",
+        "schedule_delayed_forced_discord": "**%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} player still online. |||| **%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} players still online."
     },
     "kick_messages": {
         "everyone": "All players kicked: %{reason}.",

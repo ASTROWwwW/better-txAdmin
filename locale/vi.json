@@ -9,7 +9,9 @@
         "partial_hang_warn_discord": "Có sự cố, **%{servername}** sẽ khởi động lại sau 1 phút.",
         "schedule_reason": "khởi động lại định kỳ vào lúc %{time}",
         "schedule_warn": "Máy chủ sẽ khởi động lại sau %{smart_count} phút. Vui lòng ngắt kết nối. |||| Máy chủ sẽ khởi động lại sau %{smart_count} phút.",
-        "schedule_warn_discord": "**%{servername}** sẽ khởi động lại sau %{smart_count} phút. |||| **%{servername}** đã được lên lịch khởi động lại sau %{smart_count} phút."
+        "schedule_warn_discord": "**%{servername}** sẽ khởi động lại sau %{smart_count} phút. |||| **%{servername}** đã được lên lịch khởi động lại sau %{smart_count} phút.",
+        "schedule_delayed_discord": "The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} player is online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest. |||| The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} players are online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest.",
+        "schedule_delayed_forced_discord": "**%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} player still online. |||| **%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} players still online."
     },
     "kick_messages": {
         "everyone": "Tất cả người chơi đã bị kick: %{reason}.",

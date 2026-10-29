@@ -320,6 +320,18 @@ export default class FxScheduler {
                 console.warn(`Delaying scheduled restart at ${nextRestart.string} because there are players online.`);
                 this.pendingDelayedRestart = nextRestart;
                 this.pendingDelayedRestartSince = Date.now();
+                txCore.discordBot.sendAnnouncement({
+                    type: 'warning',
+                    description: {
+                        key: 'restarter.schedule_delayed_discord',
+                        data: {
+                            servername: txConfig.general.serverName,
+                            time: nextRestart.string,
+                            smart_count: txCore.fxPlayerlist.onlineCount,
+                            maxMinutes: txConfig.restarter.maxRestartDelayMinutes,
+                        },
+                    },
+                });
                 return;
             }
 
@@ -374,6 +386,21 @@ export default class FxScheduler {
         }
 
         const restartInfo = this.pendingDelayedRestart;
+        if (onlineCount > 0 && txConfig.restarter.onlyWhenEmpty) {
+            //Not empty, so the maximum wait is what releases it
+            txCore.discordBot.sendAnnouncement({
+                type: 'danger',
+                description: {
+                    key: 'restarter.schedule_delayed_forced_discord',
+                    data: {
+                        servername: txConfig.general.serverName,
+                        time: restartInfo.string,
+                        smart_count: onlineCount,
+                        maxMinutes: txConfig.restarter.maxRestartDelayMinutes,
+                    },
+                },
+            });
+        }
         this.pendingDelayedRestart = false;
         this.pendingDelayedRestartSince = false;
         this.nextTempSchedule = false;

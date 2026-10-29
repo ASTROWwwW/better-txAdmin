@@ -60,6 +60,18 @@ export type DashboardDataEventType = {
 
 
 /**
+ * Player map channel (live positions, only sent when the server runs OneSync)
+ */
+export type PlayerMapEntryType = [netid: number, x: number, y: number, vType: number];
+export type PlayerMapEventType = {
+    mutex: string | null;
+    onesync: 'on' | 'legacy' | 'off';
+    ts: number; //when the server sent the positions, 0 if none
+    players: PlayerMapEntryType[]; //empty if the positions are too old
+};
+
+
+/**
  * Playerlist channel
  * TODO: apply those types to the playerlistManager
  */
@@ -114,6 +126,7 @@ export type ListenEventsMap = {
     updateAuthData: (authData: ReactAuthDataType) => void;
     consoleData: (data: string) => void;
     dashboard: (data: DashboardDataEventType) => void;
+    playermap: (data: PlayerMapEventType) => void;
 
     //Standalone events
     updateAvailable: (event: UpdateAvailableEventType) => void

@@ -6,6 +6,15 @@ vi.mock('./authLogic', () => ({ checkRequestAuth: vi.fn() }));
 vi.mock('./wsRooms/status', () => ({ default: { permission: true, cumulativeBuffer: false, outBuffer: null } }));
 vi.mock('./wsRooms/dashboard', () => ({ default: { permission: true, cumulativeBuffer: false, outBuffer: null } }));
 vi.mock('./wsRooms/playerlist', () => ({ default: { permission: true, cumulativeBuffer: false, outBuffer: null } }));
+vi.mock('./wsRooms/playermap', () => ({
+    default: {
+        permission: 'players.spectate',
+        eventName: 'playermap',
+        cumulativeBuffer: false,
+        outBuffer: null,
+        initialData: () => ({ players: [[1, 2, 3, 0]] }),
+    },
+}));
 vi.mock('./wsRooms/serverlog', () => ({ default: { permission: true, cumulativeBuffer: false, outBuffer: null } }));
 vi.mock('./wsRooms/liveconsole', () => ({
     default: {
@@ -47,8 +56,9 @@ const authedAdmin = (perms: string[]) => ({
     hasPermission: (perm: string) => perms.includes(perm),
 });
 
-const buildIo = (sockets: any[] = []) => ({
+const buildIo = (sockets: any[] = [], rooms: Record<string, number> = {}) => ({
     fetchSockets: async () => sockets,
+    sockets: { adapter: { rooms: new Map(Object.entries(rooms).map(([name, size]) => [name, { size }])) } },
     to: () => ({ emit: vi.fn() }),
     emit: vi.fn(),
 });
@@ -113,6 +123,43 @@ suite('WebSocket', () => {
             vi.mocked(checkRequestAuth).mockReturnValue({ success: false });
             socket.handlers.consoleCommand('status');
             expect(consoleHandler).not.toHaveBeenCalled();
+        });
+    });
+
+    suite('playermap room', () => {
+        const connect = (perms: string[]) => {
+            const socket = buildSocket('s1');
+            socket.handshake.query.rooms = 'playermap';
+            vi.mocked(checkRequestAuth).mockReturnValue({ success: true, admin: authedAdmin(perms) });
+            new WebSocket(buildIo() as any).handleConnection(socket as any);
+            return socket;
+        };
+
+        it('sends the positions to an admin who can spectate players', () => {
+            const socket = connect(['players.spectate']);
+            expect(socket.rooms.has('playermap')).toBe(true);
+            expect(socket.emit).toHaveBeenCalledWith('playermap', { players: [[1, 2, 3, 0]] });
+        });
+
+        it('keeps the positions from an admin who cannot', () => {
+            const socket = connect(['players.ban']);
+            expect(socket.rooms.has('playermap')).toBe(false);
+            expect(socket.emit).not.toHaveBeenCalledWith('playermap', expect.anything());
+        });
+
+        it('takes an admin out of the room when they lose the permission', async () => {
+            const socket = buildSocket('s1', ['playermap']);
+            vi.mocked(checkRequestAuth).mockReturnValue({ success: true, admin: authedAdmin([]) });
+            await new WebSocket(buildIo([socket]) as any).reCheckAdminAuths();
+            expect(socket.leave).toHaveBeenCalledWith('playermap');
+        });
+    });
+
+    suite('getRoomSize', () => {
+        it('counts the sockets in a room, and is 0 for an empty or unknown one', () => {
+            const ws = new WebSocket(buildIo([], { playermap: 3 }) as any);
+            expect(ws.getRoomSize('playermap')).toBe(3);
+            expect(ws.getRoomSize('status')).toBe(0);
         });
     });
 });

@@ -13,6 +13,7 @@ import { PerfChartApiResp } from '@routes/perfChart';
 import got from '@lib/got';
 import { throttle } from 'throttle-debounce';
 import { TimeCounter } from '../statsUtils';
+import getProcessRss from '@lib/host/getProcessRss';
 import { FxMonitorHealth } from '@shared/enums';
 const console = consoleFactory(modulename);
 
@@ -21,11 +22,16 @@ const console = consoleFactory(modulename);
 const LOG_DATA_FILE_VERSION = 1;
 const LOG_DATA_FILE_NAME = 'stats_svRuntime.json';
 const SERVER_MEM_REPORT_MAX_AGE = 35_000; //3 missed reports, see resource/sv_reportHeap.js
+const EXTERNAL_MEM_MAX_AGE = 90_000; //1.5 collection cycles, it is only refreshed by the 1 minute cron
 
 type ServerMemReport = {
     ts: number;
     nodeMemory: SvRtNodeMemoryType;
     fxsMemory: number | undefined; //whole FXServer process, in MB
+};
+type ExternalMemMeasure = {
+    ts: number;
+    fxsMemory: number; //whole FXServer process, in MB, read by the OS from outside
 };
 
 
@@ -38,6 +44,8 @@ export default class SvRuntimeMetrics {
     private statsLog: SvRtLogType = [];
     private lastServerMemReport: ServerMemReport | undefined;
     private memReportExpiryTimer: ReturnType<typeof setTimeout> | undefined;
+    private lastExternalMemMeasure: ExternalMemMeasure | undefined;
+    private externalMemQuery: Promise<void> | undefined;
     private lastPerfBoundaries: SvRtPerfBoundariesType | undefined;
     private lastRawPerfData: SvRtPerfCountsType | undefined;
     private lastDiffPerfData: SvRtPerfCountsType | undefined;
@@ -81,6 +89,7 @@ export default class SvRuntimeMetrics {
      */
     private resetMemoryState() {
         this.lastServerMemReport = undefined;
+        this.lastExternalMemMeasure = undefined;
         clearTimeout(this.memReportExpiryTimer);
         this.memReportExpiryTimer = undefined;
     }
@@ -99,11 +108,47 @@ export default class SvRuntimeMetrics {
 
 
     /**
-     * Returns the whole FXServer process memory in MB, as self-reported by the server.
-     * Undefined if there is no recent report.
+     * Returns the whole FXServer process memory in MB: as self-reported by the server when it is
+     * reporting, otherwise as last measured from outside by the OS (see refreshExternalFxsMemory).
+     * Undefined if there is neither.
      */
     public getFxsMemory() {
-        return this.getFreshServerMemReport()?.fxsMemory;
+        const reported = this.getFreshServerMemReport()?.fxsMemory;
+        if (reported !== undefined) return reported;
+        const measure = this.lastExternalMemMeasure;
+        if (measure && Date.now() - measure.ts <= EXTERNAL_MEM_MAX_AGE) return measure.fxsMemory;
+    }
+
+
+    /**
+     * When the server stopped sending memory reports (its Node.js thread hung, or it is still booting),
+     * asks the OS for the memory of the FXServer process, so the number does not go blank exactly when it matters.
+     * The Node.js heap cannot be read from outside, so that one stays empty.
+     * Never throws and runs one query at a time. Called by the 1 minute cron.
+     */
+    public refreshExternalFxsMemory(): Promise<void> {
+        if (this.getFreshServerMemReport()) return Promise.resolve();
+        const child = txCore.fxRunner.child;
+        if (!child?.isAlive) return Promise.resolve();
+        if (this.externalMemQuery) return this.externalMemQuery;
+
+        this.externalMemQuery = (async () => {
+            try {
+                const bytes = await getProcessRss(child.pid);
+                if (bytes === undefined) return;
+                this.lastExternalMemMeasure = {
+                    ts: Date.now(),
+                    fxsMemory: parseFloat((bytes / (1024 * 1024)).toFixed(2)),
+                };
+                txCore.webServer.webSocket.pushRefresh('dashboard');
+            } catch (error) {
+                console.verbose.warn('Failed to read the server process memory from the OS.');
+                console.verbose.dir(error);
+            } finally {
+                this.externalMemQuery = undefined;
+            }
+        })();
+        return this.externalMemQuery;
     }
 
 
@@ -192,7 +237,7 @@ export default class SvRuntimeMetrics {
     public getRecentStats() {
         const serverMemReport = this.getFreshServerMemReport();
         return {
-            fxsMemory: serverMemReport?.fxsMemory,
+            fxsMemory: this.getFxsMemory(),
             nodeMemory: serverMemReport?.nodeMemory,
             perfBoundaries: this.lastPerfBoundaries,
             perfBucketCounts: this.lastDiffPerfData ? {
@@ -213,6 +258,9 @@ export default class SvRuntimeMetrics {
         if (monitorStatus.health === FxMonitorHealth.OFFLINE) return; //collect even if partial
         if (monitorStatus.uptime < 30_000) return; //server barely booted
         if (!txCore.fxRunner.child?.isAlive) return;
+
+        //Keep the memory number alive if the server stopped reporting it (not awaited, the OS query can be slow)
+        this.refreshExternalFxsMemory();
 
         //Get performance data
         const netEndpoint = txDevEnv.EXT_STATS_HOST ?? txCore.fxRunner.child.netEndpoint;
@@ -290,7 +338,7 @@ export default class SvRuntimeMetrics {
             ts: now,
             type: 'data',
             players: playerCount,
-            fxsMemory: serverMemReport?.fxsMemory ?? null,
+            fxsMemory: this.getFxsMemory() ?? null,
             nodeMemory: serverMemReport?.nodeMemory.used ?? null,
             perf: perfToSave,
         };

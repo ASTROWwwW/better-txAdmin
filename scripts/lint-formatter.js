@@ -1,4 +1,4 @@
-module.exports = (results) => {
+export default (results) => {
     const byRuleId = results.reduce(
         (map, current) => {
             current.messages.forEach(({ ruleId, line, column }) => {

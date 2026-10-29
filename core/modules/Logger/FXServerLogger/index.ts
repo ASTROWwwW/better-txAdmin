@@ -7,6 +7,7 @@ import { LoggerBase } from '../LoggerBase.js';
 import ConsoleTransformer from './ConsoleTransformer.js';
 import ConsoleLineEnum from './ConsoleLineEnum.js';
 import { txHostConfig } from '@core/globalData.js';
+import { isSilentSystemCommand } from './silentSystemCommands';
 const console = consoleFactory(modulename);
 
 
@@ -140,7 +141,7 @@ export default class FXServerLogger extends LoggerBase {
      * Writes to the log a system command.
      */
     public logSystemCommand(cmd: string) {
-        if(cmd.startsWith('txaEvent "consoleCommand"')) return;
+        if (isSilentSystemCommand(cmd)) return;
         // if (/^txaEvent \w+ /.test(cmd)) {
         //     const [event, payload] = cmd.substring(9).split(' ', 2);
         //     cmd = chalk.italic(`<broadcasting txAdmin:events:${event}>`);

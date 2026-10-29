@@ -9,6 +9,8 @@ import { SYM_CURRENT_MUTEX } from '@lib/symbols';
 import { z } from 'zod';
 import { shortenId } from '@shared/utils';
 import { summarizeIdsArray } from '@lib/player/idUtils';
+import { handleScreenshot, handleScreenshotStop } from './screenshotActions';
+import { handleScreenStreamStart, handleScreenStreamStop, handleScreenStreamStatus } from './screenStreamActions';
 const console = consoleFactory(modulename);
 
 
@@ -30,6 +32,13 @@ export default async function PlayerActions(ctx: AuthedCtx) {
     const action = ctx.params.action;
     const { mutex, netid, license } = ctx.query;
     const sendTypedResp = (data: GenericApiResp) => ctx.send(data);
+
+    //These only need the session id, the player may be gone already
+    if (action === 'screenStreamStop') {
+        return ctx.send(await handleScreenStreamStop(ctx));
+    } else if (action === 'screenStreamStatus') {
+        return ctx.send(await handleScreenStreamStatus(ctx));
+    }
 
     //Finding the player
     let player;
@@ -55,6 +64,12 @@ export default async function PlayerActions(ctx: AuthedCtx) {
         return sendTypedResp(await handleDirectMessage(ctx, player));
     } else if (action === 'kick') {
         return sendTypedResp(await handleKick(ctx, player));
+    } else if (action === 'screenshot') {
+        return ctx.send(await handleScreenshot(ctx, player));
+    } else if (action === 'screenStreamStart') {
+        return ctx.send(await handleScreenStreamStart(ctx, player));
+    } else if (action === 'screenshotStop') {
+        return ctx.send(await handleScreenshotStop(ctx, player));
     } else {
         return sendTypedResp({ error: 'unknown action' });
     }

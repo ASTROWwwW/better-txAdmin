@@ -78,6 +78,11 @@ end
 -- HTTP request handler
 local notFoundResponse = json.encode({ error = 'route not found' })
 local function handleHttp(req, res)
+    -- Frames of the live view, sent by the game of a player (defined in sv_stream.lua)
+    if TX_STREAM_HTTP and req.path:sub(1, 8) == '/stream/' then
+        return TX_STREAM_HTTP(req, res)
+    end
+
     res.writeHead(200, { ["Content-Type"] = "application/json" })
 
     if req.path == '/stats.json' then
@@ -166,11 +171,19 @@ local cvHideAnnouncement = GetConvarBool('txAdmin-hideDefaultAnnouncement')
 local cvHideDirectMessage = GetConvarBool('txAdmin-hideDefaultDirectMessage')
 local cvHideWarning = GetConvarBool('txAdmin-hideDefaultWarning')
 local cvHideScheduledRestartWarning = GetConvarBool('txAdmin-hideDefaultScheduledRestartWarning')
+-- Events that carry a secret: they are not broadcast to the other resources of the server
+local PRIVATE_EVENTS = {
+    screenStreamStart = true, -- has the upload token of the player's game
+}
 -- Adding all known events to the list so txaEvent can do whitelist checking
 TX_EVENT_HANDLERS = {
     -- Handled by another file
     adminsUpdated = false, -- sv_admins.lua
     configChanged = false, -- sv_ctx.lua
+    playerPositionsWanted = false, -- sv_playerlist.lua
+    screenshotRequested = false, -- sv_screenshot.lua
+    screenStreamStart = false, -- sv_stream.lua
+    screenStreamStop = false, -- sv_stream.lua
 
     -- Known NO-OP
     actionRevoked = false,
@@ -385,7 +398,9 @@ local function txaEvent(source, args)
     -- print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
 
     -- need to trigger the event first, call handler after
-    TriggerEvent('txAdmin:events:' .. eventName, eventData)
+    if not PRIVATE_EVENTS[eventName] then
+        TriggerEvent('txAdmin:events:' .. eventName, eventData)
+    end
     if eventHandler ~= false then
         eventHandler(eventData)
     end

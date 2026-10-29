@@ -9,9 +9,9 @@
     "test": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit | node ../scripts/typecheck-formatter.js",
     "typecheck:full": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint ./**",
-    "lint:count": "eslint ./** -f ../scripts/lint-formatter.js",
-    "lint:fix": "eslint ./** --fix",
+    "lint": "eslint .",
+    "lint:count": "eslint . -f ../scripts/lint-formatter.js",
+    "lint:fix": "eslint . --fix",
     "license:report": "npx license-report > ../.reports/license/core.html"
   },
   "keywords": [],

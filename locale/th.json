@@ -9,7 +9,9 @@
         "partial_hang_warn_discord": "เนื่องจากพบอาการแฮงค์ในบางส่วน, **%{servername}** จะรีสตาร์ทใน 1 นาที",
         "schedule_reason": "รีสตาร์ทตามกำหนดเวลา %{time}",
         "schedule_warn": "เซิร์ฟเวอร์ถูกกำหนดเวลาให้รีสตาร์ทใน %{smart_count} นาที โปรดยกเลิกการเชื่อมต่อทันที |||| เซิร์ฟเวอร์ถูกกำหนดเวลาให้รีสตาร์ทใน %{smart_count} นาที.",
-        "schedule_warn_discord": "**%{servername}** มีกำหนดการจะรีสตาร์ทใน %{smart_count} นาที |||| **%{servername}** มีกำหนดการจะรีสตาร์ทใน %{smart_count} นาที"
+        "schedule_warn_discord": "**%{servername}** มีกำหนดการจะรีสตาร์ทใน %{smart_count} นาที |||| **%{servername}** มีกำหนดการจะรีสตาร์ทใน %{smart_count} นาที",
+        "schedule_delayed_discord": "The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} player is online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest. |||| The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} players are online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest.",
+        "schedule_delayed_forced_discord": "**%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} player still online. |||| **%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} players still online."
     },
     "kick_messages": {
         "everyone": "All players kicked: %{reason}.",

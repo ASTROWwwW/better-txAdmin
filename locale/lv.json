@@ -9,7 +9,9 @@
         "partial_hang_warn_discord": "Nepilnīgas pakāršanās dēļ, **%{servername}** tiks restartēts pēc 1 minūtes.",
         "schedule_reason": "Ieplānotais restarts %{time}",
         "schedule_warn": "Šī servera restartēšana ir ieplānota pēc %{smart_count} minūtes. Lūdzu, atvienojieties tagad. |||| Šī servera restartēšana ir ieplānota pēc %{smart_count} minūtēm.",
-        "schedule_warn_discord": "**%{servername}** ir ieplānots restarts pēc %{smart_count} minūtēm(s). |||| **%{servername}** ir ieplānots restarts pēc %{smart_count} minūtēm."
+        "schedule_warn_discord": "**%{servername}** ir ieplānots restarts pēc %{smart_count} minūtēm(s). |||| **%{servername}** ir ieplānots restarts pēc %{smart_count} minūtēm.",
+        "schedule_delayed_discord": "The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} player is online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest. |||| The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} players are online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest.",
+        "schedule_delayed_forced_discord": "**%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} player still online. |||| **%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} players still online."
     },
     "kick_messages": {
         "everyone": "Visi spēlētāji tika izmesti: %{reason}.",

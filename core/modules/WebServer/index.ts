@@ -29,6 +29,7 @@ import serveStaticMw from './middlewares/serveStaticMw';
 import serveRuntimeMw from './middlewares/serveRuntimeMw';
 import consts from '@shared/consts';
 import { resolveProxyRealIp } from '@lib/host/resolveProxyRealIp';
+import { rejectEncodedBody } from './contentEncoding';
 const console = consoleFactory(modulename);
 const nanoid = customAlphabet(dict49, 32);
 
@@ -184,19 +185,7 @@ export default class WebServer {
 
             // FIXME:NEXT:UPDATE: CVE-2026-111497 Mitigation
             // Reject inbound encoded bodies before Koa/Socket.IO decodes them.
-            const contentEncoding = req.headers['content-encoding'];
-            if (contentEncoding !== undefined) {
-                if (typeof contentEncoding !== 'string' || contentEncoding.trim().toLowerCase() !== 'identity') {
-                    res.writeHead(415, {
-                        'Content-Type': 'text/plain; charset=utf-8',
-                        'Accept-Encoding': 'identity',
-                    });
-                    res.end('Unsupported Content-Encoding');
-                    return;
-                }
-                // Downstream parsers must also recognize case/whitespace variants.
-                req.headers['content-encoding'] = 'identity';
-            }
+            if (rejectEncodedBody(req, res)) return;
 
             if (req.url.startsWith('/socket.io')) {
                 (this.io.engine as any).handleRequest(req, res);

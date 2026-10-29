@@ -9,7 +9,9 @@
         "partial_hang_warn_discord": "आंशिक ह्याङ्गको कारण, **%{servername}** १ मिनेटमा पुनः सुरु हुनेछ।",
         "schedule_reason": "%{time} मा तालिकाबद्ध पुनः सुरुवात",
         "schedule_warn": "यो सर्भर %{smart_count} मिनेटमा पुनः सुरु हुन तालिकाबद्ध छ। कृपया अहिले नै डिस्कनेक्ट गर्नुहोस्। |||| यो सर्भर %{smart_count} मिनेटमा पुनः सुरु हुन तालिकाबद्ध छ।",
-        "schedule_warn_discord": "**%{servername}** %{smart_count} मिनेटमा पुनः सुरु हुन तालिकाबद्ध छ। |||| **%{servername}** %{smart_count} मिनेटमा पुनः सुरु हुन तालिकाबद्ध छ।"
+        "schedule_warn_discord": "**%{servername}** %{smart_count} मिनेटमा पुनः सुरु हुन तालिकाबद्ध छ। |||| **%{servername}** %{smart_count} मिनेटमा पुनः सुरु हुन तालिकाबद्ध छ।",
+        "schedule_delayed_discord": "The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} player is online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest. |||| The restart of **%{servername}** scheduled at %{time} is delayed because %{smart_count} players are online. It will happen as soon as the server is empty, or in %{maxMinutes} minutes at the latest.",
+        "schedule_delayed_forced_discord": "**%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} player still online. |||| **%{servername}** is restarting now: the maximum wait of %{maxMinutes} minutes for the restart scheduled at %{time} is over, with %{smart_count} players still online."
     },
     "kick_messages": {
         "everyone": "सबैलाई निकालियो कारण: %{reason}।",

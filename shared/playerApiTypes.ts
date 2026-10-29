@@ -102,3 +102,42 @@ export type PlayersTableSearchResp = {
     players: PlayersTablePlayerType[];
     hasReachedEnd: boolean;
 } | GenericApiErrorResp;
+
+
+/**
+ * Screenshot of a player's game screen (player modal, "View screen")
+ */
+export type ApiPlayerScreenshotResp = {
+    image: string; //data:image/jpeg;base64,... or png
+    ts: number;
+} | {
+    error: string;
+    code: string; //a ScreenshotErrorCode, no_permission or unknown
+};
+
+
+/**
+ * Smooth live view of a player's game screen (player modal, "Live view")
+ */
+export type ApiPlayerScreenStreamStartResp = {
+    sessionId: string;
+    viewToken: string; //goes in the query string of the image, never shared with the player
+    fps: number;
+    width: number;
+    quality: number;
+} | {
+    error: string;
+    code: string; //a ScreenStreamErrorCode, no_permission or unknown
+};
+
+export type ApiPlayerScreenStreamStatusResp = {
+    state: 'waiting' | 'live' | 'ended';
+    reason?: string; //why it ended
+    frames: number;
+    fps: number;
+    bytes: number;
+    ageMs: number;
+} | {
+    error: string;
+    code: string; //not_found, no_permission or unknown
+};
