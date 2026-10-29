@@ -89,6 +89,14 @@ The specific way to set up those variables vary from system to system, and there
     - Which interface txAdmin will bind and enforce FXServer to bind to.
     - <mark>NOTE:</mark> This variable takes priority over the deprecated `txAdminInterface` ConVar.
 
+- **TXHOST_PROXY_IP_RANGE**
+    - **Default value:** _undefined_.
+    - A comma-separated list of IPv4 addresses or CIDR ranges of the reverse proxies you trust, eg. `10.0.0.0/8,172.16.0.0/12`.
+    - When a request comes from one of those addresses, txAdmin reads the real client IP from the `X-Forwarded-For` header (walking it from right to left and skipping trusted proxies). It is used by the rate limiter, the login logs and the local-request checks.
+    - Octets must be at most 255 and prefixes at most 32. IPv6 addresses are not supported, but IPv4-mapped ones (`::ffff:10.0.0.5`) are read as the IPv4 they carry.
+    - <mark>NOTE:</mark> Your proxy must **set or append** the client IP in `X-Forwarded-For`. If it passes the header through untouched, a client could forge it. Only list proxies you control.
+    - It can also be set with the `txAdminProxyIpRange` ConVar.
+
 ### Provider
 - **TXHOST_PROVIDER_NAME**
     - **Default value:** `Host Config`.

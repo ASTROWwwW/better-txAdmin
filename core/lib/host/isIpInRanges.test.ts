@@ -1,5 +1,5 @@
 import { suite, it, expect } from 'vitest';
-import { parseIpRanges, isIpInRanges } from './isIpInRanges';
+import { parseIpRanges, isIpInRanges, proxyIpRangeSchema } from './isIpInRanges';
 
 
 suite('parseIpRanges + isIpInRanges', () => {
@@ -49,5 +49,43 @@ suite('parseIpRanges + isIpInRanges', () => {
         const ranges = parseIpRanges(['1.2.3.4/32']);
         expect(isIpInRanges('1.2.3.4', ranges)).toBe(true);
         expect(isIpInRanges('1.2.3.5', ranges)).toBe(false);
+    });
+});
+
+
+suite('proxyIpRangeSchema', () => {
+    it('accepts ips and cidr ranges', () => {
+        expect(proxyIpRangeSchema.parse('10.0.0.0/8, 192.168.1.1')).toEqual(['10.0.0.0/8', '192.168.1.1']);
+    });
+
+    it('rejects octets above 255', () => {
+        expect(proxyIpRangeSchema.safeParse('300.1.1.1').success).toBe(false);
+        expect(proxyIpRangeSchema.safeParse('10.0.0.256/8').success).toBe(false);
+    });
+
+    it('rejects prefixes above 32', () => {
+        expect(proxyIpRangeSchema.safeParse('10.0.0.0/33').success).toBe(false);
+        expect(proxyIpRangeSchema.safeParse('10.0.0.0/99').success).toBe(false);
+    });
+
+    it('rejects an empty list', () => {
+        expect(proxyIpRangeSchema.safeParse(' , ').success).toBe(false);
+    });
+});
+
+suite('isIpInRanges with non ipv4 input', () => {
+    const ranges = parseIpRanges(['10.0.0.0/8', '0.0.0.0/8']);
+
+    it('never matches ipv6 or garbage', () => {
+        expect(isIpInRanges('::1', ranges)).toBe(false);
+        expect(isIpInRanges('fe80::1', ranges)).toBe(false);
+        expect(isIpInRanges('abc', ranges)).toBe(false);
+        expect(isIpInRanges('', ranges)).toBe(false);
+        expect(isIpInRanges('::ffff:zz', ranges)).toBe(false);
+    });
+
+    it('reads ipv4 mapped addresses as the ipv4 they carry', () => {
+        expect(isIpInRanges('::ffff:10.0.0.5', ranges)).toBe(true);
+        expect(isIpInRanges('::ffff:11.0.0.5', ranges)).toBe(false);
     });
 });

@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
 
+const IPV4_OCTET = '(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)';
+const IPV4_REGEX = new RegExp(`^${IPV4_OCTET}(?:\\.${IPV4_OCTET}){3}$`);
+const IPV4_MAPPED_PREFIX = '::ffff:';
+
+
 /**
  * Parses an IPv4 address string into a 32-bit number.
  */
@@ -43,7 +48,9 @@ export const parseIpRanges = (ranges: string[]): ParsedRange[] => {
  * Returns true if the given IPv4 address falls within any of the pre-parsed ranges.
  */
 export const isIpInRanges = (ip: string, ranges: ParsedRange[]) => {
-    const num = ipToNumber(ip);
+    const ipv4 = ip.toLowerCase().startsWith(IPV4_MAPPED_PREFIX) ? ip.slice(IPV4_MAPPED_PREFIX.length) : ip;
+    if (!IPV4_REGEX.test(ipv4)) return false;
+    const num = ipToNumber(ipv4);
     for (const range of ranges) {
         if ((num & range.mask) === range.network) return true;
     }
@@ -55,10 +62,10 @@ export const isIpInRanges = (ip: string, ranges: ParsedRange[]) => {
  * Zod schema for a comma-separated list of CIDR ranges or IPs.
  * Example: "10.0.0.0/8,172.16.0.0/12,192.168.1.1"
  */
-const cidrRegex = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d{1,2})?$/;
+const cidrRegex = new RegExp(`^${IPV4_OCTET}(?:\\.${IPV4_OCTET}){3}(?:/(?:3[0-2]|[12]?\\d))?$`);
 export const proxyIpRangeSchema = z.string().transform((val: string) => {
     return val.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
 }).pipe(
-    z.array(z.string().regex(cidrRegex, 'Each entry must be a valid IPv4 address or CIDR range (e.g. 10.0.0.0/8)'))
+    z.array(z.string().regex(cidrRegex, 'Each entry must be a valid IPv4 address (octets up to 255) or CIDR range (prefix up to 32), e.g. 10.0.0.0/8'))
         .min(1, 'At least one IP or CIDR range is required')
 );
