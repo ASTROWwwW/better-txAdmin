@@ -19,3 +19,17 @@ suite('getHostVars DISABLE_TTY_TITLE', () => {
         expect(getHostVars().DISABLE_TTY_TITLE).toBe(false);
     });
 });
+
+
+suite('getHostVars INTERFACE', () => {
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    it('accepts ipv4 and ipv6 addresses', () => {
+        vi.stubEnv('TXHOST_INTERFACE', '192.168.1.10');
+        expect(getHostVars().INTERFACE).toBe('192.168.1.10');
+        vi.stubEnv('TXHOST_INTERFACE', '::1');
+        expect(getHostVars().INTERFACE).toBe('::1');
+    });
+});
