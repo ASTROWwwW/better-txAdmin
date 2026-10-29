@@ -6,6 +6,7 @@ import mysql from 'mysql2/promise';
 import consts from '@shared/consts';
 import { txEnv, txHostConfig } from '@core/globalData';
 import { validateModifyServerConfig } from '@lib/fxserver/fxsConfigHelper';
+import { buildServerEndpoints } from '@lib/fxserver/serverEndpoints';
 import consoleFactory from '@lib/console';
 import { SYM_RESET_CONFIG } from '@lib/symbols';
 const console = consoleFactory(modulename);
@@ -153,20 +154,7 @@ async function handleSetVariables(ctx) {
 
     //Max Clients & Server Endpoints
     userVars.maxClients = (txHostConfig.forceMaxClients) ? txHostConfig.forceMaxClients : 48;
-    if (txHostConfig.netInterface || txHostConfig.fxsPort) {
-        const comment = `# ${txHostConfig.sourceName}: do not modify!`;
-        const endpointIface = txHostConfig.netInterface ?? '0.0.0.0';
-        const endpointPort = txHostConfig.fxsPort ?? 30120;
-        userVars.serverEndpoints = [
-            `endpoint_add_tcp "${endpointIface}:${endpointPort}" ${comment}`,
-            `endpoint_add_udp "${endpointIface}:${endpointPort}" ${comment}`,
-        ].join('\n');
-    } else {
-        userVars.serverEndpoints = [
-            'endpoint_add_tcp "0.0.0.0:30120"',
-            'endpoint_add_udp "0.0.0.0:30120"',
-        ].join('\n');
-    }
+    userVars.serverEndpoints = buildServerEndpoints(txHostConfig);
 
     //Setting identifiers array
     const admin = txCore.adminStore.getAdminByName(ctx.admin.name);
