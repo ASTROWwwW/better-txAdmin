@@ -5,6 +5,7 @@ import fsp from 'node:fs/promises';
 import slash from 'slash';
 import { Deployer } from '@core/deployer/index';
 import { validateFixServerConfig, findLikelyCFGPath } from '@lib/fxserver/fxsConfigHelper';
+import { stripServerCfgFromPath } from '@lib/fxserver/serverData';
 import got from '@lib/got';
 import consoleFactory from '@lib/console';
 import recipeParser from '@core/deployer/recipeParser';
@@ -155,7 +156,7 @@ async function handleValidateLocalDataFolder(ctx) {
     if (isUndefined(ctx.request.body.dataFolder)) {
         return ctx.utils.error(400, 'Invalid Request - missing parameters');
     }
-    const dataFolderPath = slash(path.normalize(ctx.request.body.dataFolder.trim() + '/'));
+    const dataFolderPath = slash(path.normalize(stripServerCfgFromPath(ctx.request.body.dataFolder.trim()) + '/'));
 
     //FIXME: replace with stuff in core/routes/settings/saveConfigs.ts > handleFxserverCard
     try {
@@ -213,7 +214,7 @@ async function handleValidateCFGFile(ctx) {
         return ctx.utils.error(400, 'Invalid Request - missing parameters');
     }
 
-    const dataFolderPath = slash(path.normalize(ctx.request.body.dataFolder.trim()));
+    const dataFolderPath = slash(path.normalize(stripServerCfgFromPath(ctx.request.body.dataFolder.trim())));
     const cfgFilePathNormalized = slash(path.normalize(ctx.request.body.cfgFile.trim()));
 
     //Validate file
@@ -250,7 +251,7 @@ async function handleSaveLocal(ctx) {
     //Prepare body input
     const cfg = {
         name: ctx.request.body.name.trim(),
-        dataFolder: slash(path.normalize(ctx.request.body.dataFolder + '/')),
+        dataFolder: slash(path.normalize(stripServerCfgFromPath(ctx.request.body.dataFolder.trim()) + '/')),
         cfgFile: slash(path.normalize(ctx.request.body.cfgFile)),
     };
 

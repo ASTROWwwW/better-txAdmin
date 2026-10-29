@@ -35,8 +35,8 @@ Legend:
     - didn't happen in v7.2.2, not sure about v7.3.2
     - doesn't seem to be neither fontSize nor lineHeight
     - NOTE: this might solve itself with the WebGL renderer update, so try that first
-- [!] if you put the cfg path in the server data path (as in, full path including `server.cfg`), the error message is silly suggesting `.` as the correct path. Instead, it should just detect the server.cfg file and remove it, without warning.
-- [!] add new env var to disable tty titles
+- [x] if you put the cfg path in the server data path (as in, full path including `server.cfg`), the error message is silly suggesting `.` as the correct path. Instead, it should just detect the server.cfg file and remove it, without warning.
+- [x] add new env var to disable tty titles
 - [ ] change deployer path picking because `FiveMBasicServerCFXDefault_1B7632.base` is obnoxious
     - [ ] try to avoind doing the hex timestamp, instead just adding a suffix for conflict resolution like windows does
     - [ ] maybe hardcode something for the cfx default recipes to shorten it, or some generic solution

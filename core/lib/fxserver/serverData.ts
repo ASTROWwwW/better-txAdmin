@@ -145,7 +145,18 @@ export const getServerDataConfigs = async (serverDataPath: string, serverDataCon
 
 
 /**
- * Validate server data path for the 
+ * Removes a trailing `server.cfg` from a server data path, as users often paste the full path of the cfg file.
+ */
+export const stripServerCfgFromPath = (dataPath: string) => {
+    const trimmed = dataPath.replace(/[/\\]+$/, '');
+    return path.basename(trimmed).toLowerCase() === 'server.cfg'
+        ? path.dirname(trimmed)
+        : dataPath;
+};
+
+
+/**
+ * Validate server data path for the
  */
 export const isValidServerDataPath = async (dataPath: string) => {
     //Check if root folder is valid
