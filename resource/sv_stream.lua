@@ -16,6 +16,7 @@ local streamUrl = "http://" .. TX_LUACOMHOST .. "/intercom/screenstream"
 local maxFrameChars = 400000 -- base64, the web server refuses bodies above 768kb
 local minGapMs = 30          -- more than ~30 frames a second is dropped
 local maxStreams = 8
+local maxInFlight = 2    -- frames being forwarded to txAdmin at once for a stream
 local minTtlMs = 1000
 local maxTtlMs = 11 * 60 * 1000
 local min = math.min
@@ -87,7 +88,7 @@ TX_EVENT_HANDLERS.screenStreamStart = function(eventData)
         netid = netid,
         expiresAt = GetGameTimer() + ttlMs,
         lastAt = -minGapMs,
-        inflight = false,
+        inflight = 0,
     }
     bySession[sessionId] = token
     streamCount = streamCount + 1
@@ -134,15 +135,15 @@ function TX_STREAM_HTTP(req, res)
             return reply(res, 413, OK)
         end
         local now = GetGameTimer()
-        if stream.inflight or now - stream.lastAt < minGapMs or streams[token] ~= stream then
-            return reply(res, 200, OK) -- too fast or the last one is still on its way: dropped, no queue
+        if stream.inflight >= maxInFlight or now - stream.lastAt < minGapMs or streams[token] ~= stream then
+            return reply(res, 200, OK) -- too fast or too many are still on their way: dropped, no queue
         end
         stream.lastAt = now
-        stream.inflight = true
+        stream.inflight = stream.inflight + 1
 
         -- sessionId comes from the table above and not from the request, the player only chooses the frame
         PerformHttpRequest(streamUrl, function(code, data)
-            stream.inflight = false
+            stream.inflight = stream.inflight - 1
             if code ~= 200 or type(data) ~= 'string' or data:find('"stop"%s*:%s*true') then
                 removeStream(token, false)
                 return reply(res, 200, STOP)

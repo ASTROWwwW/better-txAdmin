@@ -12,8 +12,10 @@ import styled from "@emotion/styled";
 import rawMenuTheme from "./styles/theme";
 import rawMenuRedmTheme from "./styles/theme-redm";
 import { useIsRedm } from "./state/isRedm.state";
+import { installGameStreamListener } from "./utils/gameStream";
 
 registerDebugFunctions();
+installGameStreamListener();
 
 //Instantiating the two themes
 declare module '@mui/material/styles' {
