@@ -2,7 +2,21 @@
 import { suite, it, describe, expect, vi, beforeEach, afterEach } from 'vitest';
 import FxScreenshots, { ScreenshotError } from './FxScreenshots';
 
-const JPEG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD';
+//Only the headers matter: the size they declare is checked, the picture itself is not decoded
+const be16 = (n: number) => Buffer.from([(n >> 8) & 0xff, n & 0xff]);
+const jpegData = (width = 640, height = 360) => Buffer.concat([
+    Buffer.from([0xff, 0xd8, 0xff, 0xe0]), be16(16), Buffer.alloc(14, 1),
+    Buffer.from([0xff, 0xc0]), be16(17), Buffer.from([8]), be16(height), be16(width), Buffer.from([3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]),
+    Buffer.from([0xff, 0xda]), be16(8), Buffer.alloc(6, 2), Buffer.alloc(30, 3), Buffer.from([0xff, 0xd9]),
+]);
+const pngData = (width = 320, height = 180) => {
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(width, 0);
+    ihdr.writeUInt32BE(height, 4);
+    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.from([0, 0, 0, 13]), Buffer.from('IHDR'), ihdr, Buffer.alloc(4), Buffer.from('IEND')]);
+};
+const uri = (mime: string, data: Buffer) => `data:image/${mime};base64,${data.toString('base64')}`;
+const JPEG = uri('jpeg', jpegData());
 const player = (extra = {}) => ({ netid: 12, displayName: 'Bob', isConnected: true, ...extra });
 
 suite('FxScreenshots', () => {
@@ -72,30 +86,45 @@ suite('FxScreenshots', () => {
             expect(sendEvent).not.toHaveBeenCalled();
         });
 
-        it('while a capture of the same player is waiting, even for another admin', async () => {
-            const first = shots.capture('admin', player());
-            expect(await codeOf(shots.capture('other', player()))).toBe('busy');
-            answer();
-            await first;
-        });
-
-        it('when the same player was asked less than a second ago', async () => {
-            const first = shots.capture('admin', player());
-            answer();
-            await first;
+        it('when the same player was asked less than a second ago and nothing came back (a failed capture is not retried at once)', async () => {
+            const first = codeOf(shots.capture('admin', player()));
+            shots.handleResult({ reqId: lastReqId(), error: 'capture_failed' });
+            expect(await first).toBe('capture_failed');
             vi.setSystemTime(Date.now() + 500);
             expect(await codeOf(shots.capture('admin', player()))).toBe('too_fast');
+            expect(sendEvent).toHaveBeenCalledTimes(1);
             vi.setSystemTime(Date.now() + 600);
             const again = shots.capture('admin', player());
             answer();
             await again;
         });
 
-        it('when five captures are already waiting', async () => {
-            const waiting = [1, 2, 3, 4, 5].map((netid) => shots.capture('admin', player({ netid })));
-            expect(await codeOf(shots.capture('admin', player({ netid: 6 })))).toBe('too_many');
-            waiting.forEach((p, i) => { p.catch(() => { }); });
+        it('when five captures are already waiting (from different admins)', async () => {
+            const waiting = [1, 2, 3, 4, 5].map((netid) => shots.capture(`admin${netid}`, player({ netid })));
+            expect(await codeOf(shots.capture('admin6', player({ netid: 6 })))).toBe('too_many');
+            waiting.forEach((p) => { p.catch(() => { }); });
             shots.handleServerClose();
+        });
+
+        it('when an admin already has two captures waiting, so one admin cannot take all the places', async () => {
+            const waiting = [1, 2].map((netid) => shots.capture('greedy', player({ netid })));
+            expect(await codeOf(shots.capture('greedy', player({ netid: 3 })))).toBe('too_many');
+            const other = shots.capture('other', player({ netid: 4 })); //another admin still can
+            expect(sendEvent).toHaveBeenCalledTimes(3);
+            [...waiting, other].forEach((p) => { p.catch(() => { }); });
+            shots.handleServerClose();
+        });
+
+        it('frees the places of an admin when the captures are answered', async () => {
+            const a = shots.capture('greedy', player({ netid: 1 }));
+            const b = shots.capture('greedy', player({ netid: 2 }));
+            shots.handleResult({ reqId: sendEvent.mock.calls[0][1].reqId, image: JPEG });
+            await a;
+            const c = shots.capture('greedy', player({ netid: 3 }));
+            expect(sendEvent).toHaveBeenCalledTimes(3);
+            shots.handleResult({ reqId: sendEvent.mock.calls[1][1].reqId, image: JPEG });
+            shots.handleResult({ reqId: sendEvent.mock.calls[2][1].reqId, image: JPEG });
+            await Promise.all([b, c]);
         });
     });
 
@@ -145,6 +174,11 @@ suite('FxScreenshots', () => {
             ['a non string', { toString: () => JPEG }],
             ['an empty payload', 'data:image/jpeg;base64,'],
             ['too much data', 'data:image/jpeg;base64,' + 'A'.repeat(600_001)],
+        ['a jpeg that declares 30000x30000 pixels', uri('jpeg', jpegData(30000, 30000))],
+        ['a jpeg that declares 65535x65535 pixels', uri('jpeg', jpegData(65535, 65535))],
+        ['a png that declares 30000x30000 pixels', uri('png', pngData(30000, 30000))],
+        ['a png that declares more than 32 bits of width', uri('png', pngData(4294967295, 4294967295))],
+        ['a data uri with no readable header at all', 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD'],
         ])('refuses an image that is %s', async (_label, image) => {
             const promise = shots.capture('admin', player());
             const outcome = codeOf(promise);
@@ -154,10 +188,91 @@ suite('FxScreenshots', () => {
 
         it('accepts a png as well', async () => {
             const promise = shots.capture('admin', player());
-            const png = 'data:image/png;base64,iVBORw0KGgo=';
+            const png = uri('png', pngData());
             shots.handleResult({ reqId: lastReqId(), image: png });
             expect((await promise).image).toBe(png);
         });
+    });
+
+    describe('two admins on the same player', () => {
+        it('share the capture that is already on its way instead of one of them being refused', async () => {
+            const first = shots.capture('admin', player());
+            const second = shots.capture('other', player());
+            expect(sendEvent).toHaveBeenCalledTimes(1); //one request to the player, not two
+            answer();
+            const [a, b] = await Promise.all([first, second]);
+            expect(a).toEqual(b);
+        });
+
+        it('get the frame that just came back when they ask less than a second later, without asking the player again', async () => {
+            const first = shots.capture('admin', player());
+            answer();
+            await first;
+            vi.setSystemTime(Date.now() + 400);
+            const second = await shots.capture('other', player());
+            expect(sendEvent).toHaveBeenCalledTimes(1);
+            expect(second.image).toBe(JPEG);
+        });
+
+        it('ask the player again once the frame is older than a second', async () => {
+            const first = shots.capture('admin', player());
+            answer();
+            await first;
+            vi.setSystemTime(Date.now() + 1_100);
+            const second = shots.capture('other', player());
+            expect(sendEvent).toHaveBeenCalledTimes(2);
+            answer();
+            await second;
+        });
+
+        it('both see their frames and both are logged, each with their own count', async () => {
+            const a1 = shots.capture('admin', player());
+            const b1 = shots.capture('other', player());
+            answer();
+            await Promise.all([a1, b1]);
+            vi.setSystemTime(Date.now() + 500);
+            await shots.capture('other', player()); //from the recent frame
+            shots.stopViewing('admin', 12);
+            shots.stopViewing('other', 12);
+            const stops = log.mock.calls.filter((c) => /Stopped viewing/.test(c[1]));
+            expect(stops.find((c) => c[0] === 'admin')[1]).toMatch(/after 1 frames?/);
+            expect(stops.find((c) => c[0] === 'other')[1]).toMatch(/after 2 frames/);
+            expect(log.mock.calls.filter((c) => /Started viewing/.test(c[1]))).toHaveLength(2);
+        });
+
+        it('when the shared capture fails, both get the failure', async () => {
+            const first = codeOf(shots.capture('admin', player()));
+            const second = codeOf(shots.capture('other', player()));
+            shots.handleResult({ reqId: lastReqId(), error: 'capture_failed' });
+            expect(await first).toBe('capture_failed');
+            expect(await second).toBe('capture_failed');
+        });
+
+        it('an admin whose viewing session expired does not get frames through someone else', async () => {
+            for (let i = 0; i < 60; i++) {
+                vi.setSystemTime(Date.now() + 10_000);
+                const promise = shots.capture('admin', player());
+                answer();
+                await promise;
+            }
+            vi.setSystemTime(Date.now() + 10_000);
+            const other = shots.capture('other', player());
+            expect(await codeOf(shots.capture('admin', player()))).toBe('session_expired');
+            answer();
+            await other;
+        });
+    });
+
+    it('closes the open sessions in the log when txAdmin shuts down, so there is never a start without a stop', async () => {
+        const first = shots.capture('admin', player());
+        answer();
+        await first;
+        shots.handleShutdown();
+        const stops = log.mock.calls.filter((c) => /Stopped viewing/.test(c[1]));
+        expect(stops).toHaveLength(1);
+        expect(stops[0][1]).toContain('shut down');
+        shots.handleShutdown(); //and only once
+        expect(log.mock.calls.filter((c) => /Stopped viewing/.test(c[1]))).toHaveLength(1);
     });
 
     it('rejects everything that is waiting when the server closes', async () => {

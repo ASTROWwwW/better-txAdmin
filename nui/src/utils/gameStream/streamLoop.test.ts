@@ -151,6 +151,20 @@ suite('GameStream loop', () => {
             expect(stream.running).toBe(false);
         });
 
+        it('waits longer after each failure in a row (250 ms, 500, 1 s...) so a broken link is not hammered', async () => {
+            send.mockResolvedValue('error');
+            const stream = new GameStream(deps);
+            stream.start(CFG);
+            const waits: number[] = [];
+            await flush();
+            for (let i = 0; i < 4; i++) {
+                waits.push(sleeps[0].ms);
+                await tick();
+            }
+            //the answer to the first frame comes after the loop chose its wait, so the normal frame time comes first
+            expect(waits).toEqual([80, 250, 500, 1000]);
+        });
+
         it('keeps going after a failure when the next frame works', async () => {
             send.mockResolvedValueOnce('error').mockResolvedValueOnce('error').mockResolvedValue('ok');
             const stream = new GameStream(deps);
@@ -193,6 +207,36 @@ suite('GameStream loop', () => {
             const urls = send.mock.calls.map((c) => c[0]);
             expect(urls).toEqual([CFG.url, 'http://1.2.3.4:30120/monitor/stream/tok_second_abcdefghijk']);
             expect(stream.running).toBe(true);
+        });
+    });
+
+    describe('restarting during a capture', () => {
+        it('the old loop does not send the frame it was capturing when it is replaced', async () => {
+            let finishOldCapture: (frame: string) => void = () => { };
+            capture.mockImplementationOnce(() => new Promise<string>((resolve) => { finishOldCapture = resolve; }));
+            const stream = new GameStream(deps);
+            stream.start(CFG);
+            await flush();
+            const newUrl = 'http://1.2.3.4:30120/monitor/stream/tok_second_abcdefghijk';
+            stream.start({ ...CFG, url: newUrl });
+            await flush();
+            finishOldCapture('OLD FRAME');
+            await flush();
+            const sent = send.mock.calls.map((c) => [c[0], c[1]]);
+            expect(sent).not.toContainEqual([CFG.url, 'OLD FRAME']);
+            expect(sent.every(([url]) => url === newUrl)).toBe(true);
+        });
+
+        it('stop during a capture sends nothing', async () => {
+            let finish: (frame: string) => void = () => { };
+            capture.mockImplementationOnce(() => new Promise<string>((resolve) => { finish = resolve; }));
+            const stream = new GameStream(deps);
+            stream.start(CFG);
+            await flush();
+            stream.stop();
+            finish('FRAME');
+            await flush();
+            expect(send).not.toHaveBeenCalled();
         });
     });
 

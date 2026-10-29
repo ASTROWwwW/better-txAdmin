@@ -13,6 +13,7 @@ import { useContentRefresh } from "@/hooks/pages";
 import { useCloseAllSheets } from "@/hooks/sheets";
 import { useState } from "react";
 import PlayerScreenDialog from "./PlayerScreenDialog";
+import { getScreenTarget } from "./screenTarget";
 
 
 type PlayerModalFooterProps = {
@@ -29,8 +30,7 @@ export default function PlayerModalFooter({ playerRef, player }: PlayerModalFoot
     const refreshContent = useContentRefresh();
     const closeAllSheets = useCloseAllSheets();
     const [isScreenOpen, setIsScreenOpen] = useState(false);
-    const screenMutex = 'mutex' in playerRef ? playerRef.mutex : undefined;
-    const screenNetid = 'netid' in playerRef ? playerRef.netid : player?.netid;
+    const screenTarget = getScreenTarget(playerRef, player);
     const playerMessageApi = useBackendApi<GenericApiOkResp>({
         method: 'POST',
         path: `/player/message`,
@@ -157,7 +157,7 @@ export default function PlayerModalFooter({ playerRef, player }: PlayerModalFoot
             <Button
                 variant='outline'
                 size='sm'
-                disabled={!hasPerm('players.spectate') || !player || !player.isConnected || !screenMutex || !screenNetid}
+                disabled={!hasPerm('players.spectate') || !player || !player.isConnected || !screenTarget}
                 onClick={() => setIsScreenOpen(true)}
                 className="pl-2"
             >
@@ -186,10 +186,10 @@ export default function PlayerModalFooter({ playerRef, player }: PlayerModalFoot
             >
                 <AlertTriangleIcon className="h-5 mr-1" /> Warn
             </Button>
-            {isScreenOpen && player && screenMutex && screenNetid ? (
+            {isScreenOpen && player && screenTarget ? (
                 <PlayerScreenDialog
-                    mutex={screenMutex}
-                    netid={screenNetid}
+                    mutex={screenTarget.mutex}
+                    netid={screenTarget.netid}
                     displayName={player.displayName}
                     onClose={() => setIsScreenOpen(false)}
                 />

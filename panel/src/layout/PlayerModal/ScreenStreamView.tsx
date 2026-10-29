@@ -83,7 +83,7 @@ export default function ScreenStreamView({ mutex, netid, displayName, onClose, o
             const resp = await statusApi({ data: { sessionId: started.sessionId }, error: () => { } });
             if (runId.current !== id) return;
 
-            const next = getStreamStep(resp, failures);
+            const next = getStreamStep(resp || undefined, failures);
             if (next.kind === 'retry') {
                 failures = next.failures;
                 continue;

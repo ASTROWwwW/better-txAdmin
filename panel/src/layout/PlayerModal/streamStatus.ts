@@ -59,7 +59,7 @@ export const getStreamStep = (resp: ApiPlayerScreenStreamStatusResp | undefined,
     if (resp.state === 'waiting') return { kind: 'waiting' };
     if (resp.state === 'live') return { kind: 'live', fps: resp.fps, frames: resp.frames };
     if (resp.state === 'ended') {
-        const reason = resp.reason && Object.hasOwn(END_REASONS, resp.reason) ? resp.reason as EndReason : 'unknown';
+        const reason = resp.reason && Object.prototype.hasOwnProperty.call(END_REASONS, resp.reason) ? resp.reason as EndReason : 'unknown';
         return ended(reason);
     }
     return ended('unknown');

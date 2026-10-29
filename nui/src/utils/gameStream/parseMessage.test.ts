@@ -30,6 +30,9 @@ suite('parseStreamMessage', () => {
         ['a path with more parts', 'http://1.2.3.4:30120/a/b/stream/tok_abcdefghijklmnop-1234'],
         ['a space', 'http://1.2.3.4:30120/monitor/stream/tok_abcdefghijklmnop-1234 '],
         ['a backslash', 'http://1.2.3.4\\@evil.example/monitor/stream/tok_abcdefghijklmnop-1234'],
+        ['text in front of an address that would be a valid one', 'x' + URL_OK],
+        ['another scheme in front of a valid address', 'javascript:alert(1)//' + URL_OK],
+        ['a valid address followed by more path', URL_OK + '/more'],
         ['an empty url', ''],
     ])('ignores %s', (_label, url) => {
         expect(parseStreamMessage(start({ url }), null, self)).toBeNull();

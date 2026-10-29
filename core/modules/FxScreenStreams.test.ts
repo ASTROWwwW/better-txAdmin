@@ -2,8 +2,13 @@
 import { suite, it, describe, expect, vi, beforeEach, afterEach } from 'vitest';
 import FxScreenStreams, { ScreenStreamError } from './FxScreenStreams';
 
-//A tiny real jpeg is not needed: only the signature is checked (FFD8FF at the start, FFD9 at the end)
-const jpegBytes = (n = 50) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(n, 7), Buffer.from([0xff, 0xd9])]);
+//A real picture is not needed: the signature (FFD8FF at the start, FFD9 at the end) and the size in the header are checked
+const be16 = (n: number) => Buffer.from([(n >> 8) & 0xff, n & 0xff]);
+const jpegBytes = (n = 50, width = 640, height = 360) => Buffer.concat([
+    Buffer.from([0xff, 0xd8, 0xff, 0xe0]), be16(16), Buffer.alloc(14, 1),
+    Buffer.from([0xff, 0xc0]), be16(17), Buffer.from([8]), be16(height), be16(width), Buffer.from([3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]),
+    Buffer.from([0xff, 0xda]), be16(8), Buffer.alloc(6, 2), Buffer.alloc(n, 7), Buffer.from([0xff, 0xd9]),
+]);
 const FRAME = jpegBytes().toString('base64');
 const player = (extra = {}) => ({ netid: 12, displayName: 'Bob', isConnected: true, ...extra });
 const fakeRes = () => {
@@ -125,7 +130,7 @@ suite('FxScreenStreams', () => {
             expect(res.headers['Cache-Control']).toContain('no-store');
             expect(streams.handleFrame(s.sessionId, FRAME)).toEqual({ ok: true });
             const body = Buffer.concat(res.chunks);
-            expect(body.toString('latin1')).toContain('--txframe\r\nContent-Type: image/jpeg\r\nContent-Length: 56\r\n\r\n');
+            expect(body.toString('latin1')).toContain(`--txframe\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpegBytes().length}\r\n\r\n`);
             expect(body.includes(jpegBytes())).toBe(true);
             expect(streams.getStatus(s.sessionId, 'admin')).toMatchObject({ state: 'live', frames: 1 });
         });
@@ -137,6 +142,9 @@ suite('FxScreenStreams', () => {
             ['not a jpeg', 'SESSION', Buffer.from('<html><script>alert(1)</script></html>').toString('base64')],
             ['a png', 'SESSION', Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.alloc(40)]).toString('base64')],
             ['a jpeg that is cut', 'SESSION', Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(40, 1)]).toString('base64')],
+            ['a jpeg that declares 30000x30000 pixels (it would be decoded by the browser of the admin)', 'SESSION', jpegBytes(50, 30000, 30000).toString('base64')],
+            ['a jpeg that declares 65535x65535 pixels', 'SESSION', jpegBytes(50, 65535, 65535).toString('base64')],
+            ['a jpeg with no frame header, so no size', 'SESSION', Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(50, 7), Buffer.from([0xff, 0xd9])]).toString('base64')],
             ['an empty frame', 'SESSION', ''],
             ['too much data', 'SESSION', 'A'.repeat(400_001)],
         ])('discards %s without showing anything', (_label, id, frame) => {
@@ -147,6 +155,38 @@ suite('FxScreenStreams', () => {
             streams.handleFrame(id === 'SESSION' ? s.sessionId : id, frame as any);
             expect(res.chunks.length).toBe(before);
             expect(streams.getStatus(s.sessionId, 'admin')).toMatchObject({ frames: 0 });
+        });
+
+        it('discards a picture that is valid but bigger than 400000 characters in base64', () => {
+            const s = start();
+            const big = jpegBytes(310_000).toString('base64');
+            expect(big.length).toBeGreaterThan(400_000);
+            streams.handleFrame(s.sessionId, big);
+            expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(0);
+            const fits = jpegBytes(290_000).toString('base64');
+            expect(fits.length).toBeLessThan(400_000);
+            vi.setSystemTime(Date.now() + 100);
+            streams.handleFrame(s.sessionId, fits);
+            expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(1);
+        });
+
+        it('only takes strict base64: a valid picture with a character that does not belong in it is discarded', () => {
+            const s = start();
+            const half = Math.floor(FRAME.length / 2);
+            for (const junk of [' ', '"', '\n', '<', '=']) {
+                vi.setSystemTime(Date.now() + 100);
+                streams.handleFrame(s.sessionId, FRAME.slice(0, half) + junk + FRAME.slice(half));
+            }
+            expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(0);
+        });
+
+        it('discards a picture that is cut: a valid header but no end of image marker', () => {
+            const s = start();
+            streams.handleFrame(s.sessionId, jpegBytes().subarray(0, -2).toString('base64'));
+            expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(0);
+            vi.setSystemTime(Date.now() + 100);
+            streams.handleFrame(s.sessionId, FRAME);
+            expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(1);
         });
 
         it('tells the player to stop for a session that does not exist or has ended', () => {
@@ -182,6 +222,15 @@ suite('FxScreenStreams', () => {
     });
 
     describe('the viewer side', () => {
+        it('lets at most 3 viewers watch one stream (browser tabs), a 4th is refused and a freed place can be taken', () => {
+            const s = start();
+            const viewers = [fakeRes(), fakeRes(), fakeRes()];
+            for (const res of viewers) streams.attachViewer(s.sessionId, s.viewToken, 'admin', res);
+            expect(codeOf(() => streams.attachViewer(s.sessionId, s.viewToken, 'admin', fakeRes()))).toBe('too_many');
+            viewers[0].emit('close');
+            expect(codeOf(() => streams.attachViewer(s.sessionId, s.viewToken, 'admin', fakeRes()))).toBe('ok');
+        });
+
         it('only lets the admin who started it watch, with the viewer token', () => {
             const s = start('admin');
             const attempts = [
@@ -309,6 +358,18 @@ suite('FxScreenStreams', () => {
             expect(endedWith(s).state).not.toBe('ended');
         });
 
+        it('ends at 10 minutes even between two frames, it does not wait for the next one', async () => {
+            const s = start();
+            streams.attachViewer(s.sessionId, s.viewToken, 'admin', fakeRes());
+            for (let i = 0; i < 119; i++) { //a frame every 5 seconds, the last one at 595 s
+                streams.handleFrame(s.sessionId, FRAME);
+                await vi.advanceTimersByTimeAsync(5_000);
+            }
+            expect(endedWith(s).state).toBe('live');
+            await vi.advanceTimersByTimeAsync(6_000);
+            expect(endedWith(s)).toMatchObject({ state: 'ended', reason: 'time_limit' });
+        });
+
         it('ends after 10 minutes and has to be started again on purpose', async () => {
             const s = start();
             streams.attachViewer(s.sessionId, s.viewToken, 'admin', fakeRes());
@@ -327,6 +388,25 @@ suite('FxScreenStreams', () => {
             streams.handleServerClose();
             expect(endedWith(s)).toMatchObject({ state: 'ended', reason: 'server_closed' });
             expect(res.ended).toBe(true);
+        });
+
+        it('writes the stop line of every open stream when txAdmin shuts down, and cuts the viewers', () => {
+            const s = start();
+            const res = fakeRes();
+            streams.attachViewer(s.sessionId, s.viewToken, 'admin', res);
+            streams.handleFrame(s.sessionId, FRAME);
+            const other = start('other', player({ netid: 13, displayName: 'Eve' }));
+            streams.stop('other', other.sessionId); //already over, must not be logged twice
+            log.mockClear();
+            sendEvent.mockClear();
+            streams.handleShutdown();
+            const stops = log.mock.calls.filter((c) => /Stopped viewing/.test(c[1]));
+            expect(stops).toHaveLength(1);
+            expect(stops[0][1]).toMatch(/#12 \(Bob\).*\(shutdown\)/);
+            expect(res.ended).toBe(true);
+            expect(sendEvent).not.toHaveBeenCalled(); //the server goes down with txAdmin
+            streams.handleShutdown();
+            expect(log.mock.calls.filter((c) => /Stopped viewing/.test(c[1]))).toHaveLength(1);
         });
 
         it('forgets an ended session after a minute', async () => {

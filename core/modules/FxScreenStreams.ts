@@ -2,11 +2,13 @@ const modulename = 'FxScreenStreams';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { ServerResponse } from 'node:http';
 import consoleFactory from '@lib/console';
+import { getImageSize, isSafeImage } from '@lib/imageSize';
 const console = consoleFactory(modulename);
 
 
 //Consts
 const MAX_SESSIONS = 3;
+const MAX_VIEWERS = 3; //browser tabs of the same admin on one stream
 const SESSION_MAX_MS = 10 * 60_000;
 const NO_VIEWER_MS = 15_000;
 const FIRST_FRAME_MS = 12_000;
@@ -33,7 +35,7 @@ export class ScreenStreamError extends Error {
     }
 }
 export type ScreenStreamEndReason =
-    | 'closed' | 'replaced' | 'no_viewer' | 'time_limit' | 'failed_to_start' | 'stalled' | 'revoked' | 'server_closed';
+    | 'closed' | 'replaced' | 'no_viewer' | 'time_limit' | 'failed_to_start' | 'stalled' | 'revoked' | 'server_closed' | 'shutdown';
 type StreamPlayer = { netid: number; displayName: string; isConnected: boolean };
 type StreamViewerRes = Pick<ServerResponse, 'writeHead' | 'write' | 'end' | 'on'> & { writableNeedDrain?: boolean };
 type Session = {
@@ -162,7 +164,7 @@ export default class FxScreenStreams {
             return { ok: true };
         }
         const jpeg = Buffer.from(frame, 'base64');
-        if (!isJpeg(jpeg)) return { ok: true };
+        if (!isJpeg(jpeg) || getImageSize(jpeg)?.type !== 'jpeg' || !isSafeImage(jpeg)) return { ok: true };
 
         session.lastFrameAt = now;
         session.frames++;
@@ -194,6 +196,7 @@ export default class FxScreenStreams {
         if (session.endedAt || typeof viewToken !== 'string' || !safeEqual(viewToken, session.viewToken)) {
             throw new ScreenStreamError('not_found');
         }
+        if (session.viewers.size >= MAX_VIEWERS) throw new ScreenStreamError('too_many');
 
         res.writeHead(200, {
             'Content-Type': `multipart/x-mixed-replace; boundary=${BOUNDARY}`,
@@ -248,6 +251,16 @@ export default class FxScreenStreams {
     handleServerClose() {
         for (const session of this.#sessions.values()) {
             if (!session.endedAt) this.#end(session, 'server_closed', false);
+        }
+    }
+
+
+    /**
+     * txAdmin is stopping: every open stream gets its line in the log, so there is never a start without a stop.
+     */
+    handleShutdown() {
+        for (const session of this.#sessions.values()) {
+            if (!session.endedAt) this.#end(session, 'shutdown', false);
         }
     }
 

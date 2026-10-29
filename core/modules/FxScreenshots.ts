@@ -1,6 +1,7 @@
 const modulename = 'FxScreenshots';
 import { randomBytes } from 'node:crypto';
 import consoleFactory from '@lib/console';
+import { isSafeImage } from '@lib/imageSize';
 const console = consoleFactory(modulename);
 
 
@@ -8,9 +9,11 @@ const console = consoleFactory(modulename);
 const REQUEST_TIMEOUT_MS = 8_000;
 const MIN_INTERVAL_MS = 1_000; //between two captures of the same player
 const MAX_PENDING = 5;
+const MAX_PENDING_PER_ADMIN = 2; //so one admin cannot take all the places
 const SESSION_GAP_MS = 15_000; //no capture for this long ends a viewing session
 const SESSION_MAX_MS = 10 * 60_000; //then the admin has to choose to keep watching
 const CLEANUP_INTERVAL_MS = 5_000;
+const FRAME_KEPT_MS = 5_000; //a frame is kept to hand it out again for MIN_INTERVAL_MS, this is when it is forgotten
 const MAX_IMAGE_CHARS = 600_000; //the http body limit of the web server is 768kb
 const SCREENSHOT_QUALITY = 0.4;
 const IMAGE_REGEX = /^data:image\/(?:jpeg|png);base64,[A-Za-z0-9+/]+={0,2}$/;
@@ -28,9 +31,11 @@ export class ScreenshotError extends Error {
     }
 }
 type CapturePlayer = { netid: number; displayName: string; isConnected: boolean };
+type Frame = { image: string; ts: number };
 type Pending = {
     netid: number;
-    resolve: (frame: { image: string; ts: number }) => void;
+    adminName: string; //who asked, the others that want the same player share the answer
+    resolve: (frame: Frame) => void;
     reject: (error: ScreenshotError) => void;
     timer: ReturnType<typeof setTimeout>;
 };
@@ -49,8 +54,9 @@ type Session = {
  * Asks the server resource for one screenshot of a player's game screen, which it takes with the
  * `screenshot-basic` resource, and waits for it to come back through the intercom route.
  * An admin that keeps asking is a viewing session: it is written to the admin log when it starts and
- * when it stops, it ends after 10 minutes unless the admin renews it, and a player can only be captured
- * once a second and once at a time.
+ * when it stops, it ends after 10 minutes unless the admin renews it (starting again is logged too), and a
+ * player is captured at most once a second: other admins that want the same player share the capture that is
+ * on its way, or the frame that just came back.
  *
  * NOTE: the image is taken and sent by the player's game client, so a modified client can send anything.
  * That is why it is checked strictly here (a jpeg or png data URI, base64 only, size capped), and why
@@ -58,6 +64,8 @@ type Session = {
  */
 export default class FxScreenshots {
     #pending = new Map<string, Pending>();
+    #inFlight = new Map<number, Promise<Frame>>(); //per player, the capture that is on its way
+    #lastFrame = new Map<number, { frame: Frame; at: number }>();
     #lastRequestByNetid = new Map<number, number>();
     #sessions = new Map<string, Session>();
 
@@ -71,70 +79,90 @@ export default class FxScreenshots {
      * `renew` starts a new viewing session when the previous one reached its 10 minutes.
      */
     capture(adminName: string, player: CapturePlayer, options: { renew?: boolean } = {}) {
-        return new Promise<{ image: string; ts: number }>((resolve, reject) => {
-            const now = Date.now();
-            if (!txCore.fxRunner.child?.isAlive) return reject(new ScreenshotError('server_offline'));
-            if (!player.isConnected) return reject(new ScreenshotError('player_gone'));
-            if ([...this.#pending.values()].some((p) => p.netid === player.netid)) {
-                return reject(new ScreenshotError('busy'));
+        const now = Date.now();
+        if (!txCore.fxRunner.child?.isAlive) return Promise.reject(new ScreenshotError('server_offline'));
+        if (!player.isConnected) return Promise.reject(new ScreenshotError('player_gone'));
+
+        //Viewing session: refused once it is over, until the admin renews it
+        const key = `${adminName}#${player.netid}`;
+        let session = this.#sessions.get(key);
+        if (session && !session.expired && now - session.since >= SESSION_MAX_MS) {
+            this.#endSession(session, 'time limit');
+        }
+        if (session?.expired) {
+            if (!options.renew) {
+                session.lastActivity = now;
+                return Promise.reject(new ScreenshotError('session_expired'));
             }
+            this.#sessions.delete(key);
+            session = undefined;
+        }
+
+        //Someone else already asked for this player: share their capture, or the frame that just came back
+        const shared = this.#inFlight.get(player.netid);
+        const recent = this.#lastFrame.get(player.netid);
+        const canShare = shared !== undefined || (recent !== undefined && now - recent.at < MIN_INTERVAL_MS);
+        if (!canShare) {
+            const pendingOfAdmin = [...this.#pending.values()].filter((p) => p.adminName === adminName).length;
             if (now - (this.#lastRequestByNetid.get(player.netid) ?? 0) < MIN_INTERVAL_MS) {
-                return reject(new ScreenshotError('too_fast'));
+                return Promise.reject(new ScreenshotError('too_fast'));
             }
-            if (this.#pending.size >= MAX_PENDING) return reject(new ScreenshotError('too_many'));
+            if (this.#pending.size >= MAX_PENDING || pendingOfAdmin >= MAX_PENDING_PER_ADMIN) {
+                return Promise.reject(new ScreenshotError('too_many'));
+            }
+        }
 
-            //Viewing session: refused once it is over, until the admin renews it
-            const key = `${adminName}#${player.netid}`;
-            let session = this.#sessions.get(key);
-            if (session && !session.expired && now - session.since >= SESSION_MAX_MS) {
-                this.#endSession(session, 'time limit');
-            }
-            if (session?.expired) {
-                if (!options.renew) {
-                    session.lastActivity = now;
-                    return reject(new ScreenshotError('session_expired'));
-                }
-                this.#sessions.delete(key);
-                session = undefined;
-            }
-            if (!session) {
-                session = {
-                    adminName,
-                    netid: player.netid,
-                    displayName: player.displayName,
-                    since: now,
-                    lastActivity: now,
-                    frames: 0,
-                    expired: false,
-                };
-                this.#sessions.set(key, session);
-                txCore.logger.admin.write(adminName, `Started viewing the screen of #${player.netid} (${player.displayName}).`);
-            }
-            session.lastActivity = now;
+        if (!session) {
+            session = {
+                adminName,
+                netid: player.netid,
+                displayName: player.displayName,
+                since: now,
+                lastActivity: now,
+                frames: 0,
+                expired: false,
+            };
+            this.#sessions.set(key, session);
+            txCore.logger.admin.write(adminName, `Started viewing the screen of #${player.netid} (${player.displayName}).`);
+        }
+        session.lastActivity = now;
 
-            //Asking the server
+        const viewing = session;
+        const counted = (frame: Frame) => {
+            viewing.frames++;
+            return frame;
+        };
+        if (shared) return shared.then(counted);
+        if (canShare && recent) return Promise.resolve(counted(recent.frame));
+        return this.#request(adminName, player.netid).then(counted);
+    }
+
+
+    /**
+     * Asks the server for a screenshot, the same one for everybody that wants this player until it is answered.
+     */
+    #request(adminName: string, netid: number) {
+        const promise = new Promise<Frame>((resolve, reject) => {
             const reqId = randomBytes(12).toString('base64url');
             const timer = setTimeout(() => {
                 this.#pending.delete(reqId);
                 reject(new ScreenshotError('timeout'));
             }, REQUEST_TIMEOUT_MS);
-            this.#pending.set(reqId, {
-                netid: player.netid,
-                resolve: (frame) => {
-                    session!.frames++;
-                    resolve(frame);
-                },
-                reject,
-                timer,
-            });
-            this.#lastRequestByNetid.set(player.netid, now);
+            this.#pending.set(reqId, { netid, adminName, resolve, reject, timer });
+            this.#lastRequestByNetid.set(netid, Date.now());
             const sent = txCore.fxRunner.sendEvent('screenshotRequested', {
                 reqId,
-                netid: player.netid,
+                netid,
                 quality: SCREENSHOT_QUALITY,
             });
             if (!sent) this.#settle(reqId)?.reject(new ScreenshotError('server_offline'));
         });
+        this.#inFlight.set(netid, promise);
+        const done = () => {
+            if (this.#inFlight.get(netid) === promise) this.#inFlight.delete(netid);
+        };
+        promise.then(done, done);
+        return promise;
     }
 
 
@@ -152,11 +180,18 @@ export default class FxScreenshots {
             return pending.reject(new ScreenshotError(code));
         }
         const image = payload.image;
-        if (typeof image !== 'string' || image.length > MAX_IMAGE_CHARS || !IMAGE_REGEX.test(image)) {
+        if (
+            typeof image !== 'string'
+            || image.length > MAX_IMAGE_CHARS
+            || !IMAGE_REGEX.test(image)
+            || !isSafeImage(Buffer.from(image.slice(image.indexOf(',') + 1), 'base64'))
+        ) {
             console.verbose.warn('Discarded an invalid screenshot from the server.');
             return pending.reject(new ScreenshotError('invalid_image'));
         }
-        pending.resolve({ image, ts: Date.now() });
+        const frame = { image, ts: Date.now() };
+        this.#lastFrame.set(pending.netid, { frame, at: frame.ts });
+        pending.resolve(frame);
     }
 
 
@@ -182,6 +217,19 @@ export default class FxScreenshots {
         }
         this.#sessions.clear();
         this.#lastRequestByNetid.clear();
+        this.#lastFrame.clear();
+        this.#inFlight.clear();
+    }
+
+
+    /**
+     * txAdmin is stopping: the sessions that are open get their line in the log, so there is no start without a stop.
+     */
+    handleShutdown() {
+        for (const session of this.#sessions.values()) {
+            if (!session.expired) this.#endSession(session, 'txAdmin shut down');
+        }
+        this.#sessions.clear();
     }
 
 
@@ -206,6 +254,9 @@ export default class FxScreenshots {
 
     #closeIdleSessions() {
         const now = Date.now();
+        for (const [netid, last] of this.#lastFrame) {
+            if (now - last.at > FRAME_KEPT_MS) this.#lastFrame.delete(netid);
+        }
         for (const [key, session] of this.#sessions) {
             if (now - session.lastActivity <= SESSION_GAP_MS) continue;
             if (!session.expired) this.#endSession(session, 'no more frames asked');

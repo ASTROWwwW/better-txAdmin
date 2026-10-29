@@ -126,6 +126,7 @@ export type ListenEventsMap = {
     updateAuthData: (authData: ReactAuthDataType) => void;
     consoleData: (data: string) => void;
     dashboard: (data: DashboardDataEventType) => void;
+    playermap: (data: PlayerMapEventType) => void;
 
     //Standalone events
     updateAvailable: (event: UpdateAvailableEventType) => void

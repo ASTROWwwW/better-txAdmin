@@ -5,10 +5,13 @@ import Koa from 'koa';
 import Router from '@koa/router';
 
 vi.mock('@core/globalData', () => ({ txEnv: { txaVersion: '9.9.9' }, txHostConfig: {}, txDevEnv: {} }));
+//The top level middleware turns an error of a route into a logged line, the stream would still run: keep them
+const { loggedErrors } = vi.hoisted(() => ({ loggedErrors: [] as string[] }));
 vi.mock('@lib/console', () => {
     const noop = () => { };
     const verbose = { warn: noop, error: noop, log: noop, debug: noop, dir: noop };
-    return { default: () => ({ warn: noop, error: noop, log: noop, debug: noop, verbose }) };
+    const error = (message: unknown) => { loggedErrors.push(String(message)); };
+    return { default: () => ({ warn: noop, error, log: noop, debug: noop, verbose }) };
 });
 import topLevelMw from '@modules/WebServer/middlewares/topLevelMw';
 import cacheControlMw from '@modules/WebServer/middlewares/cacheControlMw';
@@ -18,7 +21,13 @@ import ScreenStreamView from './screenStreamView';
 
 const COOKIE = 'txAdmin-test';
 const SESS_ID = '12345678-1234-1234-1234-123456789012'; //36 chars, what the session middleware accepts
-const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(40, 9), Buffer.from([0xff, 0xd9])]);
+const be16 = (n: number) => Buffer.from([(n >> 8) & 0xff, n & 0xff]);
+//the size in the header is checked, the rest of the picture is not
+const jpeg = Buffer.concat([
+    Buffer.from([0xff, 0xd8, 0xff, 0xe0]), be16(16), Buffer.alloc(14, 1),
+    Buffer.from([0xff, 0xc0]), be16(17), Buffer.from([8]), be16(360), be16(640), Buffer.from([3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]),
+    Buffer.from([0xff, 0xda]), be16(8), Buffer.alloc(6, 2), Buffer.alloc(40, 9), Buffer.from([0xff, 0xd9]),
+]);
 const FRAME = jpeg.toString('base64');
 
 suite('screen stream view route (real http, real session and top level middlewares)', () => {
@@ -62,6 +71,7 @@ suite('screen stream view route (real http, real session and top level middlewar
     });
 
     beforeEach(async () => {
+        loggedErrors.length = 0;
         admins = {
             admin: { name: 'admin', master: false, permissions: ['players.spectate'], password_hash: 'h' },
             other: { name: 'other', master: false, permissions: ['players.spectate'], password_hash: 'h' },
@@ -114,6 +124,7 @@ suite('screen stream view route (real http, real session and top level middlewar
             const res = await pending;
             expect(res.status).toBe(200);
             expect(res.body.includes(jpeg)).toBe(true);
+            expect(loggedErrors).toEqual([]); //an error of the session middleware would only show up here
         });
 
         it('detaches the viewer when the browser closes the image', async () => {

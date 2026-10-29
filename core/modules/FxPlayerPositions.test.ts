@@ -53,14 +53,6 @@ suite('FxPlayerPositions', () => {
         ['not an object', 'x'],
         ['wrong type tag', { type: 'other', players: [] }],
         ['players not an array', report('nope')],
-        ['an entry that is not a tuple of 4', report([[1, 2, 3]])],
-        ['a non integer netid', report([[1.5, 1, 1, 0]])],
-        ['a negative netid', report([[-1, 1, 1, 0]])],
-        ['a string coordinate', report([[1, '5', 1, 0]])],
-        ['a NaN coordinate', report([[1, NaN, 1, 0]])],
-        ['an infinite coordinate', report([[1, Infinity, 1, 0]])],
-        ['a coordinate far outside the map', report([[1, 1e9, 1, 0]])],
-        ['a vehicle type out of range', report([[1, 1, 1, 99]])],
         ['more than 4096 players', report(Array.from({ length: 4097 }, (_, i) => [i, 0, 0, 0]))],
     ])('ignores a report with %s and keeps the previous positions', (_label, payload) => {
         positions.handleReport(report([[7, 7, 7, 0]]));
@@ -68,6 +60,38 @@ suite('FxPlayerPositions', () => {
         positions.handleReport(payload);
         expect(txCore.webServer.webSocket.pushRefresh).not.toHaveBeenCalled();
         expect(positions.getRoomData().players).toEqual([[7, 7, 7, 0]]);
+    });
+
+    it.each([
+        ['an entry that is not a tuple of 4', [1, 2, 3]],
+        ['an entry that is not an array', 'x'],
+        ['a null entry', null],
+        ['a non integer netid', [1.5, 1, 1, 0]],
+        ['a negative netid', [-1, 1, 1, 0]],
+        ['a netid above 65535', [65536, 1, 1, 0]],
+        ['a string coordinate', [1, '5', 1, 0]],
+        ['a null coordinate (what the json of the server writes for NaN or inf)', [1, null, null, 0]],
+        ['a NaN coordinate', [1, NaN, 1, 0]],
+        ['an infinite coordinate', [1, Infinity, 1, 0]],
+        ['a coordinate just outside the map', [1, 20001, 1, 0]],
+        ['a coordinate far outside the map', [1, 1e9, 1, 0]],
+        ['a vehicle type out of range', [1, 1, 1, 99]],
+    ])('drops only the entry with %s and keeps the other players', (_label, bad) => {
+        positions.handleReport(report([[10, 100, 100, 0], bad, [20, 200, 200, 1]]));
+        expect(positions.getRoomData().players).toEqual([[10, 100, 100, 0], [20, 200, 200, 1]]);
+        expect(txCore.webServer.webSocket.pushRefresh).toHaveBeenCalledWith('playermap');
+    });
+
+    it('one bad entry among 100 good ones leaves 100 on the map', () => {
+        const players = Array.from({ length: 100 }, (_, i) => [i + 1, i, i, 0]);
+        positions.handleReport(report([...players, [500, 20001, 0, 0]]));
+        expect(positions.getRoomData().players).toHaveLength(100);
+    });
+
+    it('a report of only bad entries shows nobody, it does not keep the old positions as if they were new', () => {
+        positions.handleReport(report([[7, 7, 7, 0]]));
+        positions.handleReport(report([[1, null, null, 0]]));
+        expect(positions.getRoomData().players).toEqual([]);
     });
 
     it('keeps the last entry when a netid appears twice', () => {
@@ -88,6 +112,41 @@ suite('FxPlayerPositions', () => {
         positions.handleServerClose();
         expect(positions.getRoomData().players).toEqual([]);
         expect(txCore.webServer.webSocket.pushRefresh).toHaveBeenCalledWith('playermap');
+    });
+
+    describe('positions that are not renewed', () => {
+        it('are cleared and pushed to the room once, so an open map does not keep showing them as live', () => {
+            positions.handleReport(report([[1, 1, 1, 0]]));
+            txCore.webServer.webSocket.pushRefresh.mockClear();
+            vi.advanceTimersByTime(15_000);
+            expect(txCore.webServer.webSocket.pushRefresh).not.toHaveBeenCalled();
+            expect(positions.getRoomData().players).toHaveLength(1);
+            vi.advanceTimersByTime(5_000);
+            expect(txCore.webServer.webSocket.pushRefresh).toHaveBeenCalledTimes(1);
+            expect(txCore.webServer.webSocket.pushRefresh).toHaveBeenCalledWith('playermap');
+            expect(positions.getRoomData().players).toEqual([]);
+            vi.advanceTimersByTime(30_000);
+            expect(txCore.webServer.webSocket.pushRefresh).toHaveBeenCalledTimes(1);
+        });
+
+        it('are cleared even when nobody is on the map or the server is down (the check does not depend on asking)', () => {
+            roomSize = 0;
+            child = undefined;
+            positions.handleReport(report([[1, 1, 1, 0]]));
+            txCore.webServer.webSocket.pushRefresh.mockClear();
+            vi.advanceTimersByTime(25_000);
+            expect(txCore.webServer.webSocket.pushRefresh).toHaveBeenCalledTimes(1);
+        });
+
+        it('stay when reports keep coming', () => {
+            for (let i = 0; i < 6; i++) {
+                positions.handleReport(report([[1, 1, 1, 0]]));
+                txCore.webServer.webSocket.pushRefresh.mockClear();
+                vi.advanceTimersByTime(5_000);
+            }
+            expect(txCore.webServer.webSocket.pushRefresh).not.toHaveBeenCalled();
+            expect(positions.getRoomData().players).toHaveLength(1);
+        });
     });
 
     describe('asking the server for positions', () => {

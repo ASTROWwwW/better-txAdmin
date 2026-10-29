@@ -13,14 +13,17 @@ const ASK_INTERVAL_MS = 5_000;
 const ASK_TTL_MS = 20_000; //4 intervals, the server stops reporting if it is not asked again
 
 const coordSchema = z.number().finite().min(-MAX_COORD).max(MAX_COORD);
+const entrySchema = z.tuple([
+    z.number().int().min(0).max(65535), //netid
+    coordSchema, //x
+    coordSchema, //y
+    z.number().int().min(-1).max(8), //vehicle type, see sv_playerlist.lua
+]);
+//The entries are checked one by one: a player whose position is nonsense (a script can push a ped far outside
+//the map, and the json of the server writes NaN as null) must not empty the map for everyone else
 const reportSchema = z.object({
     type: z.literal('txAdminPlayerPositions'),
-    players: z.array(z.tuple([
-        z.number().int().min(0).max(65535), //netid
-        coordSchema, //x
-        coordSchema, //y
-        z.number().int().min(-1).max(8), //vehicle type, see sv_playerlist.lua
-    ])).max(MAX_PLAYERS),
+    players: z.array(z.unknown()).max(MAX_PLAYERS),
 });
 
 
@@ -35,6 +38,7 @@ export default class FxPlayerPositions {
 
     constructor() {
         setInterval(() => {
+            this.#clearIfStale();
             if (!txCore.fxRunner.child?.isAlive) return;
             if (txCore.webServer.webSocket.getRoomSize('playermap') < 1) return;
             txCore.fxRunner.sendEvent('playerPositionsWanted', { ttlMs: ASK_TTL_MS });
@@ -44,7 +48,7 @@ export default class FxPlayerPositions {
 
     /**
      * Handles a `txAdminPlayerPositions` report from the server resource.
-     * An invalid report is ignored as a whole, so the map never shows half of something.
+     * A report that is not a report is ignored as a whole, and an entry that is not valid is dropped alone.
      */
     handleReport(payload: unknown) {
         const validation = reportSchema.safeParse(payload);
@@ -56,12 +60,31 @@ export default class FxPlayerPositions {
 
         //Last entry wins for a repeated netid, and the entries are copied
         const byNetid = new Map<number, PlayerMapEntryType>();
-        for (const [netid, x, y, vType] of validation.data.players) {
+        let dropped = 0;
+        for (const entry of validation.data.players) {
+            const parsed = entrySchema.safeParse(entry);
+            if (!parsed.success) {
+                dropped++;
+                continue;
+            }
+            const [netid, x, y, vType] = parsed.data;
             byNetid.delete(netid);
             byNetid.set(netid, [netid, x, y, vType]);
         }
+        if (dropped) console.verbose.warn(`Dropped ${dropped} invalid entries of a txAdminPlayerPositions report.`);
         this.#entries = [...byNetid.values()];
         this.#ts = Date.now();
+        txCore.webServer.webSocket.pushRefresh('playermap');
+    }
+
+
+    /**
+     * The room only hears about new reports, so when they stop coming (the server hangs, or the resource keeps
+     * failing) an open map would keep showing the last positions as if they were live.
+     */
+    #clearIfStale() {
+        if (!this.#entries.length || Date.now() - this.#ts <= STALE_MS) return;
+        this.#entries = [];
         txCore.webServer.webSocket.pushRefresh('playermap');
     }
 
