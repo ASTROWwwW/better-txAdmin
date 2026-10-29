@@ -85,11 +85,18 @@ const taskDownloadFile = async (options, basePath, deployerCtx) => {
  * If the directory structure does not exist, it is created.
  */
 const githubRepoSourceRegex = /^((https?:\/\/github\.com\/)?|@)?([\w.\-_]+)\/([\w.\-_]+).*$/;
+const gitRefRegex = /^[\w.\-]+(\/[\w.\-]+)*$/;
+const isGitRefValid = (ref) => (
+    typeof ref == 'string'
+    && ref.length <= 200
+    && gitRefRegex.test(ref)
+    && !ref.split('/').includes('..')
+);
 const validatorDownloadGithub = (options) => {
     return (
         typeof options.src == 'string'
         && isPathValid(options.dest, false)
-        && (typeof options.ref == 'string' || typeof options.ref == 'undefined')
+        && (typeof options.ref == 'undefined' || options.ref === '' || isGitRefValid(options.ref))
         && (typeof options.subpath == 'string' || typeof options.subpath == 'undefined')
     );
 };
@@ -129,7 +136,8 @@ const taskDownloadGithub = async (options, basePath, deployerCtx) => {
     deployerCtx.$step = 'ref set';
 
     //Preparing vars
-    const downURL = `https://api.github.com/repos/${repoOwner}/${repoName}/zipball/${reference}`;
+    const encodedRef = reference.split('/').map(encodeURIComponent).join('/');
+    const downURL = `https://api.github.com/repos/${repoOwner}/${repoName}/zipball/${encodedRef}`;
     const tmpFilePath = path.join(basePath, `.${(Date.now() % 100000000).toString(36)}.download`);
     const destPath = safePath(basePath, options.dest);
 

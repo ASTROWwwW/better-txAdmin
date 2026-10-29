@@ -133,6 +133,14 @@ The specific way to set up those variables vary from system to system, and there
         - `tabarra:271816:$2a$11$K3HwDzkoUfhU6.W.tScfhOLEtR5uNc9qpQ685emtERx3dZ7fmgXCy`
         - `tabarra::$2a$11$K3HwDzkoUfhU6.W.tScfhOLEtR5uNc9qpQ685emtERx3dZ7fmgXCy`
 
+### Other
+- **GITHUB_TOKEN**
+    - **Default value:** _undefined_.
+    - Not a `TXHOST_` variable: a plain environment variable read by the recipe deployer when a recipe uses the `download_github` task.
+    - When set, it is sent as a `Bearer` token to `api.github.com` to raise the API rate limit, which is useful on shared hosts where many recipes are deployed from the same IP, and to let the task read private repositories the token has access to. The token is only ever sent to GitHub, and the redirect to the zip download does not carry it.
+    - A recipe can only deploy what the token can read, so give it the least access it needs (no scopes at all is enough for public repositories).
+
+
 > [!NOTE]  
 > More variables are still being considered, like options to configure reverse proxy IPs, security locks, etc.  
 > Please feel free to provide feedback and suggestions.

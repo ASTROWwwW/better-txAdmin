@@ -80,3 +80,36 @@ suite('unzip task', () => {
         await expect(fsp.access(path.join(basePath, 'deploy', 'escaped.txt'))).rejects.toThrow();
     });
 });
+
+
+suite('download_github ref validation', () => {
+    const validate = (ref?: string) => recipeEngine.download_github.validate({
+        src: 'owner/repo',
+        dest: './resources/thing',
+        ref,
+    });
+
+    it.each(['main', 'v1.2.3', 'feature/foo-bar', '9fceb02d0ae598e95dc970b74767f19372d61af8', 'release_2024'])(
+        'accepts the ref %s',
+        (ref) => expect(validate(ref)).toBe(true),
+    );
+
+    it('accepts a missing or empty ref, the default branch is looked up through the api', () => {
+        expect(validate(undefined)).toBe(true);
+        expect(validate('')).toBe(true);
+    });
+
+    it.each([
+        '../../orgs/someone/repos',
+        'a/../b',
+        '..',
+        '/leading',
+        'trailing/',
+        'with space',
+        'q?x=1',
+        'frag#ment',
+        '%2e%2e/secret',
+        'a\\b',
+        'x'.repeat(300),
+    ])('refuses the ref %j', (ref) => expect(validate(ref)).toBe(false));
+});
