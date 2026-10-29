@@ -1,5 +1,5 @@
 //@ts-nocheck
-import { suite, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { suite, it, describe, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('@core/globalData', () => ({ txEnv: { txaVersion: '9.9.9' }, txHostConfig: {}, txDevEnv: {} }));
 vi.mock('@lib/console', () => {
@@ -11,6 +11,7 @@ import Intercom from './intercom';
 
 suite('intercom screenshot scope', () => {
     let handleResult: ReturnType<typeof vi.fn>;
+    let handleFrame: ReturnType<typeof vi.fn>;
     const ctx = (scope: string, body: any) => ({
         params: { scope },
         request: { body },
@@ -20,7 +21,8 @@ suite('intercom screenshot scope', () => {
 
     beforeEach(() => {
         handleResult = vi.fn();
-        vi.stubGlobal('txCore', { fxScreenshots: { handleResult } });
+        handleFrame = vi.fn().mockReturnValue({ ok: true });
+        vi.stubGlobal('txCore', { fxScreenshots: { handleResult }, fxScreenStreams: { handleFrame } });
     });
     afterEach(() => {
         vi.unstubAllGlobals();
@@ -34,6 +36,29 @@ suite('intercom screenshot scope', () => {
         expect(payload).toMatchObject({ reqId: 'abc', image: 'data:image/jpeg;base64,AAAA' });
         expect(payload.txAdminToken).not.toBe('secret-token');
         expect(c.send).toHaveBeenCalledWith({ success: true });
+    });
+
+    describe('screenstream scope', () => {
+        it('hands the frame to the stream manager and relays its answer (ok or stop) to the server resource', async () => {
+            const c = ctx('screenstream', { txAdminToken: 'secret-token', sessionId: 's1', frame: '/9j/AAAA' });
+            await Intercom(c);
+            expect(handleFrame).toHaveBeenCalledWith('s1', '/9j/AAAA');
+            expect(c.send).toHaveBeenCalledWith({ ok: true });
+
+            handleFrame.mockReturnValue({ stop: true });
+            const c2 = ctx('screenstream', { txAdminToken: 'secret-token', sessionId: 's1', frame: '/9j/AAAA' });
+            await Intercom(c2);
+            expect(c2.send).toHaveBeenCalledWith({ stop: true });
+        });
+
+        it('stops the sender when the body is not what the server resource sends', async () => {
+            for (const body of [{ txAdminToken: 'x' }, { txAdminToken: 'x', sessionId: 12, frame: 'a' }, { txAdminToken: 'x', sessionId: 's1', frame: { a: 1 } }]) {
+                const c = ctx('screenstream', body);
+                await Intercom(c);
+                expect(c.send).toHaveBeenCalledWith({ stop: true });
+            }
+            expect(handleFrame).not.toHaveBeenCalled();
+        });
     });
 
     it('still refuses an unknown scope', async () => {

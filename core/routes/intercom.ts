@@ -38,6 +38,12 @@ export default async function Intercom(ctx: InitializedCtx) {
     } else if (scope == 'screenshot') {
         txCore.fxScreenshots.handleResult(postData);
         return ctx.send({ success: true });
+    } else if (scope == 'screenstream') {
+        //A frame of the live view, sent by the server resource. Anything else makes the sender stop.
+        if (typeof postData.sessionId !== 'string' || typeof postData.frame !== 'string') {
+            return ctx.send({ stop: true });
+        }
+        return ctx.send(txCore.fxScreenStreams.handleFrame(postData.sessionId, postData.frame));
     } else {
         return ctx.send({
             type: 'danger',

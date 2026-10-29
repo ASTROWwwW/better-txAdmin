@@ -109,6 +109,7 @@ export default () => {
     router.get('/player', apiAuthMw, routes.player_modal);
     router.get('/player/stats', apiAuthMw, routes.player_stats);
     router.get('/player/search', apiAuthMw, routes.player_search);
+    router.get('/player/screenStream/:sessionId', routes.player_screenStream); //cookie and view token, see the route
     router.post('/player/checkJoin', intercomAuthMw, routes.player_checkJoin);
     router.post('/player/:action', apiAuthMw, routes.player_actions);
     router.get('/whitelist/:table', apiAuthMw, routes.whitelist_list);
