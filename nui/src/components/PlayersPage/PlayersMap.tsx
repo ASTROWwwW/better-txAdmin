@@ -5,6 +5,7 @@ import { PlayerData } from "../../hooks/usePlayerListListener";
 import { useSetAssociatedPlayer } from "../../state/playerDetails.state";
 import { useSetPlayerModalVisibility } from "../../state/playerModal.state";
 import PlayerCard from "./PlayerCard";
+import { clusterMarkers, Cluster } from "./clusterMarkers";
 
 const MAP_IMAGE = "images/map-satellite.jpg";
 //NOTE: the image is the original 5944x8075 satellite map downscaled to 3000x4076 to keep the resource light
@@ -18,31 +19,10 @@ const MERGE_DIST = MARKER_SIZE * 0.8;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 8;
 
-type Marker = { x: number; y: number; player: PlayerData };
-type Cluster = { x: number; y: number; players: PlayerData[] };
 
 const getClusterLabel = (cluster: Cluster) => {
   if (cluster.players.length === 1) return cluster.players[0].id;
   return cluster.players.length >= 10 ? "9+" : cluster.players.length;
-};
-
-const clusterMarkers = (markers: Marker[], mergeDist: number): Cluster[] => {
-  const parent = markers.map((_, i) => i);
-  const root = (i: number): number => (parent[i] === i ? i : (parent[i] = root(parent[i])));
-  for (let i = 0; i < markers.length; i++) {
-    for (let j = i + 1; j < markers.length; j++) {
-      if (Math.hypot(markers[i].x - markers[j].x, markers[i].y - markers[j].y) <= mergeDist) {
-        parent[root(i)] = root(j);
-      }
-    }
-  }
-  const groups = new Map<number, Marker[]>();
-  markers.forEach((m, i) => groups.set(root(i), [...(groups.get(root(i)) ?? []), m]));
-  return [...groups.values()].map((g) => ({
-    x: g.reduce((sum, m) => sum + m.x, 0) / g.length,
-    y: g.reduce((sum, m) => sum + m.y, 0) / g.length,
-    players: g.map((m) => m.player),
-  }));
 };
 
 const MapRoot = styled(Box)(({ theme }) => ({
