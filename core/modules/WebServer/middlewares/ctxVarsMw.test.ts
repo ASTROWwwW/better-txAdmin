@@ -58,6 +58,30 @@ suite('ctxVarsMw over real http', () => {
         expect(vars.isLocalRequest).toBe(false);
     });
 
+    it('is not made local by a forged first entry when the real client is ipv6, ip:port or mapped', async () => {
+        hostConfig.proxyIpRanges = parseIpRanges(['127.0.0.1']);
+        const cases: [string, string][] = [
+            ['127.0.0.1, 2001:db8::1', '2001:db8::1'],
+            ['127.0.0.1, 203.0.113.9:51234', '203.0.113.9'],
+            ['127.0.0.1, ::ffff:203.0.113.9', '203.0.113.9'],
+            ['2001:db8::1', '2001:db8::1'],
+        ];
+        for (const [header, expectedIp] of cases) {
+            const vars = await requestVars({ 'x-forwarded-for': header });
+            expect(vars.realIP, header).toBe(expectedIp);
+            expect(vars.isLocalRequest, header).toBe(false);
+        }
+    });
+
+    it('fails closed when the client entry cannot be read, keeping the request non local', async () => {
+        hostConfig.proxyIpRanges = parseIpRanges(['127.0.0.1']);
+        for (const header of ['127.0.0.1, unknown', '127.0.0.1, ', '198.51.100.1, garbage']) {
+            const vars = await requestVars({ 'x-forwarded-for': header });
+            expect(vars.realIP, header).toBe('unresolved');
+            expect(vars.isLocalRequest, header).toBe(false);
+        }
+    });
+
     it('ignores the header when the peer is not a trusted proxy', async () => {
         hostConfig.proxyIpRanges = parseIpRanges(['10.0.0.0/8']);
         const vars = await requestVars({ 'x-forwarded-for': '203.0.113.9' });
