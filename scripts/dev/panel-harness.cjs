@@ -7,6 +7,9 @@
 //   open http://127.0.0.1:4180/map
 //
 // ONESYNC=off shows the OneSync notice, PERMS=players.ban shows the access denied page.
+// SHOT=ok|missing|expire|flaky plays the player screen viewer: frames drawn here, screenshot-basic missing,
+// a session that runs out after 4 frames and continues when renewed, or a few failures before frames.
+// GET /__calls lists what the screen viewer called.
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -33,6 +36,56 @@ const indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')
   .replace(/<!--\s*\{\{(\w+)\}\}\s*-->/g, (_m, name) => replacers[name] ?? '')
   .replace(/\{\{(\w+)\}\}/g, (_m, name) => replacers[name] ?? '');
 
+
+// ---- fake player screenshots
+const zlib = require('node:zlib');
+const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+const crc32 = (buf) => { let c = 0xffffffff; for (const b of buf) c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(td)); return Buffer.concat([len, td, crc]); };
+const makePng = (frame) => {
+  const W = 320, H = 180, raw = Buffer.alloc((W * 3 + 1) * H);
+  for (let y = 0; y < H; y++) {
+    raw[y * (W * 3 + 1)] = 0;
+    for (let x = 0; x < W; x++) {
+      const o = y * (W * 3 + 1) + 1 + x * 3;
+      const bar = Math.abs(x - ((frame * 24) % W)) < 6;
+      raw[o] = bar ? 255 : 30 + (x * 120) / W; raw[o + 1] = bar ? 255 : 60 + (y * 100) / H; raw[o + 2] = bar ? 255 : 140;
+    }
+  }
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(H, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return 'data:image/png;base64,' + Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]).toString('base64');
+};
+const SHOT = process.env.SHOT || 'ok';
+const calls = [];
+let shotCount = 0, expired = false, flakyLeft = 3;
+const readBody = (req) => new Promise((resolve) => { let b = ''; req.on('data', (c) => (b += c)); req.on('end', () => { try { resolve(JSON.parse(b || '{}')); } catch { resolve({}); } }); });
+const playerModal = (url) => ({
+  serverTime: Date.now(), banTemplates: [],
+  player: { displayName: 'Player' + url.searchParams.get('netid'), pureName: 'player', isRegistered: true, isConnected: true, idsOffline: [], idsOnline: ['license:abc'], hwidsOffline: [], hwidsOnline: [], license: 'abc', actionHistory: [], netid: parseInt(url.searchParams.get('netid')) },
+});
+const json = (res, data) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(data)); };
+const handleApi = async (req, res, url) => {
+  if (url.pathname === '/__calls') return json(res, calls);
+  if (req.method === 'GET' && url.pathname === '/player') return json(res, playerModal(url));
+  if (req.method === 'POST' && url.pathname === '/player/screenshot') {
+    const body = await readBody(req);
+    calls.push({ path: 'screenshot', renew: body.renew === true, at: Date.now() });
+    await new Promise((r) => setTimeout(r, 150));
+    if (SHOT === 'missing') return json(res, { error: 'The screenshot-basic resource is not started on this server.', code: 'screenshot_basic_missing' });
+    if (SHOT === 'flaky' && flakyLeft > 0) { flakyLeft--; return json(res, { error: 'The player did not answer in time.', code: 'timeout' }); }
+    if (SHOT === 'expire') {
+      if (body.renew === true) expired = false;
+      if (shotCount >= 4 && !body.renew) expired = true;
+      if (expired) return json(res, { error: 'The viewing session ended after 10 minutes.', code: 'session_expired' });
+      if (body.renew === true) shotCount = 0;
+    }
+    shotCount++;
+    return json(res, { image: makePng(shotCount), ts: Date.now() });
+  }
+  if (req.method === 'POST' && url.pathname === '/player/screenshotStop') { calls.push({ path: 'stop', at: Date.now() }); return json(res, { success: true }); }
+  return json(res, {});
+};
+
 const MIME = { '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.json': 'application/json', '.map': 'application/json' };
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
@@ -44,7 +97,8 @@ const server = http.createServer((req, res) => {
   if (url.pathname.startsWith('/socket.io')) return; // handled by socket.io
   if (/\.(js|css|png|jpg|svg|woff2|map)$/.test(url.pathname)) { res.writeHead(404); return res.end(); }
   if (url.pathname === '/' || !path.extname(url.pathname)) {
-    if (url.pathname.startsWith('/auth') || url.pathname.startsWith('/fxserver') || url.pathname.startsWith('/player') || url.pathname.startsWith('/status')) {
+    if (/^\/player(\/|$)/.test(url.pathname) || url.pathname === '/__calls') { handleApi(req, res, url); return; }
+    if (url.pathname.startsWith('/auth') || url.pathname.startsWith('/fxserver') || url.pathname.startsWith('/status')) {
       res.writeHead(200, { 'content-type': 'application/json' }); return res.end('{}');
     }
     res.writeHead(200, { 'content-type': 'text/html' }); return res.end(indexHtml);

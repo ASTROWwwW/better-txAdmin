@@ -1,7 +1,7 @@
 import { DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { PlayerModalRefType, useClosePlayerModal } from "@/hooks/playerModal";
-import { AlertTriangleIcon, MailIcon, ShieldCheckIcon } from "lucide-react";
+import { AlertTriangleIcon, MailIcon, MonitorIcon, ShieldCheckIcon } from "lucide-react";
 import { KickOneIcon } from '@/components/KickIcons';
 import { useBackendApi } from "@/hooks/fetch";
 import { useAdminPerms } from "@/hooks/auth";
@@ -11,6 +11,8 @@ import { PlayerModalPlayerData } from "@shared/playerApiTypes";
 import { useLocation, useRoute } from "wouter";
 import { useContentRefresh } from "@/hooks/pages";
 import { useCloseAllSheets } from "@/hooks/sheets";
+import { useState } from "react";
+import PlayerScreenDialog from "./PlayerScreenDialog";
 
 
 type PlayerModalFooterProps = {
@@ -26,6 +28,9 @@ export default function PlayerModalFooter({ playerRef, player }: PlayerModalFoot
     const [isAlreadyInAdminPage] = useRoute('/admins');
     const refreshContent = useContentRefresh();
     const closeAllSheets = useCloseAllSheets();
+    const [isScreenOpen, setIsScreenOpen] = useState(false);
+    const screenMutex = 'mutex' in playerRef ? playerRef.mutex : undefined;
+    const screenNetid = 'netid' in playerRef ? playerRef.netid : player?.netid;
     const playerMessageApi = useBackendApi<GenericApiOkResp>({
         method: 'POST',
         path: `/player/message`,
@@ -152,6 +157,15 @@ export default function PlayerModalFooter({ playerRef, player }: PlayerModalFoot
             <Button
                 variant='outline'
                 size='sm'
+                disabled={!hasPerm('players.spectate') || !player || !player.isConnected || !screenMutex || !screenNetid}
+                onClick={() => setIsScreenOpen(true)}
+                className="pl-2"
+            >
+                <MonitorIcon className="h-5 mr-1" /> Screen
+            </Button>
+            <Button
+                variant='outline'
+                size='sm'
                 disabled={!hasPerm('players.kick') || !player || !player.isConnected}
                 onClick={handleKick}
                 className="pl-2"
@@ -172,6 +186,14 @@ export default function PlayerModalFooter({ playerRef, player }: PlayerModalFoot
             >
                 <AlertTriangleIcon className="h-5 mr-1" /> Warn
             </Button>
+            {isScreenOpen && player && screenMutex && screenNetid ? (
+                <PlayerScreenDialog
+                    mutex={screenMutex}
+                    netid={screenNetid}
+                    displayName={player.displayName}
+                    onClose={() => setIsScreenOpen(false)}
+                />
+            ) : null}
         </DialogFooter>
     )
 }
