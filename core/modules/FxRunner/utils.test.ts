@@ -1,5 +1,5 @@
-import { suite, it, expect, test } from 'vitest';
-import { sanitizeConsoleArgString, stringifyConsoleArgs } from './utils';
+import { suite, it, expect, test, vi, beforeEach } from 'vitest';
+import { getMutableConvars, sanitizeConsoleArgString, stringifyConsoleArgs } from './utils';
 
 const fxsArgsParser = (str: string) => {
     const args: string[] = [];
@@ -156,4 +156,56 @@ suite('stringifyConsoleArgs', () => {
         });
     });
 
+});
+
+
+const buildConfig = (whitelist: { mode: string; rejectionMessage: string }) => ({
+    banlist: { enabled: true },
+    whitelist,
+    general: { language: 'en', serverName: 'test' },
+    gameFeatures: {
+        menuAlignRight: false,
+        menuPageKey: 'F1',
+        playerModePtfx: true,
+        hideAdminInPunishments: true,
+        hideAdminInMessages: false,
+        hideDefaultAnnouncement: false,
+        hideDefaultDirectMessage: false,
+        hideDefaultWarning: false,
+        hideDefaultScheduledRestartWarning: false,
+    },
+});
+
+const findInstructions = (isSpawnArg: boolean) => {
+    return getMutableConvars(isSpawnArg).find(([, name]) => name === 'sv_allowlistInstructions');
+};
+
+suite('getMutableConvars allowlist instructions', () => {
+    suite('without a rejection message', () => {
+        beforeEach(() => {
+            vi.stubGlobal('txConfig', buildConfig({ mode: 'disabled', rejectionMessage: '' }));
+        });
+
+        it('clears the convar at runtime', () => {
+            expect(findInstructions(false)).toEqual(['sets', 'sv_allowlistInstructions', '']);
+        });
+
+        it('does not pass an empty argument at spawn, fxserver skips it and the args count mismatches', () => {
+            expect(findInstructions(true)).toBeUndefined();
+        });
+    });
+
+    suite('with a rejection message', () => {
+        beforeEach(() => {
+            vi.stubGlobal('txConfig', buildConfig({ mode: 'approvedLicense', rejectionMessage: 'line1\nline2' }));
+        });
+
+        it('keeps the message as is at runtime', () => {
+            expect(findInstructions(false)).toEqual(['sets', 'sv_allowlistInstructions', 'line1\nline2']);
+        });
+
+        it('escapes line breaks in the spawn argument', () => {
+            expect(findInstructions(true)).toEqual(['+sets', 'sv_allowlistInstructions', 'line1\\nline2']);
+        });
+    });
 });

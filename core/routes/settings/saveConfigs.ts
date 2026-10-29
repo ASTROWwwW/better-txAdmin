@@ -12,7 +12,7 @@ import { fromError } from 'zod-validation-error';
 import Translator, { localeFileSchema } from '@modules/Translator';
 import ConfigStore from '@modules/ConfigStore';
 import { resolveCFGFilePath } from '@lib/fxserver/fxsConfigHelper';
-import { findPotentialServerDataPaths, isValidServerDataPath } from '@lib/fxserver/serverData';
+import { findPotentialServerDataPaths, isValidServerDataPath, stripServerCfgFromPath } from '@lib/fxserver/serverData';
 import { getFsErrorMdMessage } from '@lib/fs';
 import { generateStatusMessage } from '@modules/DiscordBot/commands/status';
 import { getSchemaChainError } from '@modules/ConfigStore/schema/utils';
@@ -214,6 +214,7 @@ const handleFxserverCard: CardHandler = async (inputConfig, sendTypedResp) => {
     }
 
     //Validating Server Data Path
+    inputConfig.server.dataPath = stripServerCfgFromPath(inputConfig.server.dataPath);
     const dataPath = inputConfig.server.dataPath;
     try {
         const isValid = await isValidServerDataPath(dataPath);

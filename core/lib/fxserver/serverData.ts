@@ -129,6 +129,7 @@ export const getServerDataConfigs = async (serverDataPath: string, serverDataCon
         if (typeof entrySize !== 'number' || !entryPath.endsWith('.cfg')) continue;
         if (entrySize > CFG_SIZE_LIMIT) {
             configs.push([entryPath, 'file is too big']);
+            continue;
         }
 
         try {
@@ -144,7 +145,19 @@ export const getServerDataConfigs = async (serverDataPath: string, serverDataCon
 
 
 /**
- * Validate server data path for the 
+ * Removes a trailing `server.cfg` from a server data path, as users often paste the full path of the cfg file.
+ */
+export const stripServerCfgFromPath = (dataPath: string) => {
+    const trimmed = dataPath.replace(/[/\\]+$/, '');
+    if (path.basename(trimmed).toLowerCase() !== 'server.cfg') return dataPath;
+    const parent = path.dirname(trimmed);
+    //A bare file name has no folder to fall back to, '.' would silently mean the process cwd
+    return parent === '.' ? dataPath : parent;
+};
+
+
+/**
+ * Validate server data path for the
  */
 export const isValidServerDataPath = async (dataPath: string) => {
     //Check if root folder is valid

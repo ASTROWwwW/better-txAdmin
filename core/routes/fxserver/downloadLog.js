@@ -1,5 +1,6 @@
 const modulename = 'WebServer:FXServerDownloadLog';
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import consoleFactory from '@lib/console';
 const console = consoleFactory(modulename);
 
@@ -14,16 +15,15 @@ export default async function FXServerDownloadLog(ctx) {
         return ctx.utils.renderMessage('You don\'t have permission to download this log.');
     }
 
-    let readFile;
+    const logPath = txCore.logger.fxserver.activeFilePath;
     try {
-        //NOTE: why the fuck are errors from `createReadStream` not being caught? Well, using readFileSync for now...
-        // readFile = fs.createReadStream(txCore.logger.fxserver.activeFilePath);
-        readFile = fs.readFileSync(txCore.logger.fxserver.activeFilePath);
+        await fsp.access(logPath, fs.constants.R_OK);
     } catch (error) {
-        console.error(`Could not read log file ${txCore.logger.fxserver.activeFilePath}.`);
+        console.error(`Could not read log file ${logPath}.`);
+        return ctx.utils.renderMessage('The log file could not be read.');
     }
     const now = (new Date() / 1000).toFixed();
     ctx.attachment(`fxserver_${now}.log`);
-    ctx.body = readFile;
+    ctx.body = fs.createReadStream(logPath);
     console.log(`[${ctx.admin.name}] Downloading console log file.`);
 };

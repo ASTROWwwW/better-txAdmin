@@ -58,6 +58,10 @@ The specific way to set up those variables vary from system to system, and there
     - If true, do not pipe the FXServer's stdout/stderr to txAdmin's stdout, meaning that you will only be able to see the server output by visiting the txAdmin Live Console page.
     - If enabled, server owners won't be able to disable it in `txAdmin -> Settings -> FXServer` page.
     - <mark>NOTE:</mark> We recommend that Game Server Providers enable this option.
+- **TXHOST_DISABLE_TTY_TITLE**
+    - **Default value:** `false`.
+    - If true, txAdmin will not set the terminal window title (the one showing the player count and server name).
+    - The title is already disabled automatically on Pterodactyl, ZAP-Hosting and when `TXHOST_PROVIDER_NAME` is set.
 - **TXHOST_API_TOKEN**
     - **Default value:** _undefined_.
     - **Options:** `disabled` or a string matching `/^[A-Za-z0-9_-]{16,48}$/`.
@@ -84,6 +88,15 @@ The specific way to set up those variables vary from system to system, and there
     - **Default value:** `0.0.0.0`.
     - Which interface txAdmin will bind and enforce FXServer to bind to.
     - <mark>NOTE:</mark> This variable takes priority over the deprecated `txAdminInterface` ConVar.
+
+- **TXHOST_PROXY_IP_RANGE**
+    - **Default value:** _undefined_.
+    - A comma-separated list of IPv4 addresses or CIDR ranges of the reverse proxies you trust, eg. `10.0.0.0/8,172.16.0.0/12`.
+    - When a request comes from one of those addresses, txAdmin reads the real client IP from the `X-Forwarded-For` header (walking it from right to left and skipping trusted proxies). It is used by the rate limiter, the login logs and the local-request checks.
+    - Octets must be at most 255 and prefixes at most 32. IPv6 addresses are not supported, but IPv4-mapped ones (`::ffff:10.0.0.5`) are read as the IPv4 they carry.
+    - <mark>NOTE:</mark> Your proxy must **set or append** the client IP in `X-Forwarded-For`. If it passes the header through untouched, a client could forge it. Only list proxies you control.
+    - If the last address the proxy wrote cannot be read (for example Squid with `forwarded_for off` writes `unknown`), txAdmin does not guess: those requests count as non-local and share one rate limit bucket per proxy, so every user behind that proxy is limited together. Configure the proxy to write the client address.
+    - It can also be set with the `txAdminProxyIpRange` ConVar.
 
 ### Provider
 - **TXHOST_PROVIDER_NAME**
@@ -120,6 +133,14 @@ The specific way to set up those variables vary from system to system, and there
         - `tabarra:271816`
         - `tabarra:271816:$2a$11$K3HwDzkoUfhU6.W.tScfhOLEtR5uNc9qpQ685emtERx3dZ7fmgXCy`
         - `tabarra::$2a$11$K3HwDzkoUfhU6.W.tScfhOLEtR5uNc9qpQ685emtERx3dZ7fmgXCy`
+
+### Other
+- **GITHUB_TOKEN**
+    - **Default value:** _undefined_.
+    - Not a `TXHOST_` variable: a plain environment variable read by the recipe deployer when a recipe uses the `download_github` task.
+    - When set, it is sent as a `Bearer` token to `api.github.com` to raise the API rate limit, which is useful on shared hosts where many recipes are deployed from the same IP, and to let the task read private repositories the token has access to. The token is only ever sent to GitHub, and the redirect to the zip download does not carry it.
+    - A recipe can only deploy what the token can read, so give it the least access it needs (no scopes at all is enough for public repositories).
+
 
 > [!NOTE]  
 > More variables are still being considered, like options to configure reverse proxy IPs, security locks, etc.  

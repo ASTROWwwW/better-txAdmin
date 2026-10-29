@@ -28,6 +28,7 @@ import { isProxy } from 'node:util/types';
 import serveStaticMw from './middlewares/serveStaticMw';
 import serveRuntimeMw from './middlewares/serveRuntimeMw';
 import consts from '@shared/consts';
+import { resolveProxyRealIp } from '@lib/host/resolveProxyRealIp';
 const console = consoleFactory(modulename);
 const nanoid = customAlphabet(dict49, 32);
 
@@ -176,7 +177,27 @@ export default class WebServer {
         try {
             // console.debug(`HTTP ${req.method} ${req.url}`);
             if (!checkHttpLoad()) return;
-            if (!checkRateLimit(req?.socket?.remoteAddress)) return;
+            const socketIp = req?.socket?.remoteAddress;
+            const xff = req?.headers?.['x-forwarded-for'];
+            const rateLimitIp = resolveProxyRealIp(socketIp, xff) ?? socketIp;
+            if (!checkRateLimit(rateLimitIp)) return;
+
+            // FIXME:NEXT:UPDATE: CVE-2026-111497 Mitigation
+            // Reject inbound encoded bodies before Koa/Socket.IO decodes them.
+            const contentEncoding = req.headers['content-encoding'];
+            if (contentEncoding !== undefined) {
+                if (typeof contentEncoding !== 'string' || contentEncoding.trim().toLowerCase() !== 'identity') {
+                    res.writeHead(415, {
+                        'Content-Type': 'text/plain; charset=utf-8',
+                        'Accept-Encoding': 'identity',
+                    });
+                    res.end('Unsupported Content-Encoding');
+                    return;
+                }
+                // Downstream parsers must also recognize case/whitespace variants.
+                req.headers['content-encoding'] = 'identity';
+            }
+
             if (req.url.startsWith('/socket.io')) {
                 (this.io.engine as any).handleRequest(req, res);
             } else {

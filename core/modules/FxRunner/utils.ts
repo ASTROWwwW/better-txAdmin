@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises';
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { txEnv, txHostConfig } from "@core/globalData";
+import { formatHostPort } from "@lib/host/isIpAddressLocal";
 import { redactStartupSecrets } from "@lib/misc";
 import path from "path";
 
@@ -61,7 +62,8 @@ export const getMutableConvars = (isCmdLine = false) => {
             ? txConfig.whitelist.rejectionMessage.replaceAll('\n', '\\n')
             : txConfig.whitelist.rejectionMessage;
         convars.push(['sets', 'sv_allowlistInstructions', instructions]);
-    } else {
+    } else if (!isCmdLine) {
+        //NOTE: fxserver skips empty string arguments (even `""`), which makes the args count mismatch (CFX-942)
         convars.push(['sets', 'sv_allowlistInstructions', '']);
     }
 
@@ -92,7 +94,7 @@ export const mutableConvarConfigDependencies = [
  * Pre calculating HOST dependent spawn variables
  */
 const txCoreEndpoint = txHostConfig.netInterface
-    ? `${txHostConfig.netInterface}:${txHostConfig.txaPort}`
+    ? formatHostPort(txHostConfig.netInterface, txHostConfig.txaPort)
     : `127.0.0.1:${txHostConfig.txaPort}`;
 let osSpawnVars: OsSpawnVars;
 if (txEnv.isWindows) {

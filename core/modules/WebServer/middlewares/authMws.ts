@@ -117,7 +117,7 @@ export const webAuthMw = async (ctx: InitializedCtx, next: Function) => {
     //Check auth
     const authResult = checkRequestAuth(
         ctx.request.headers,
-        ctx.ip,
+        ctx.txVars.realIP,
         ctx.txVars.isLocalRequest,
         ctx.sessTools
     );
@@ -143,7 +143,7 @@ export const apiAuthMw = async (ctx: InitializedCtx, next: Function) => {
     //Check auth
     const authResult = checkRequestAuth(
         ctx.request.headers,
-        ctx.ip,
+        ctx.txVars.realIP,
         ctx.txVars.isLocalRequest,
         ctx.sessTools
     );

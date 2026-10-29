@@ -33,7 +33,7 @@ RegisterNetEvent('txsv:req:tpToPlayer', function(tgtId)
 
     -- ensure the player ped exists
     local ped = GetPlayerPed(tgtId)
-    if ped then
+    if ped and ped ~= 0 then
       local coords = GetEntityCoords(ped)
       data.x = coords[1]
       data.y = coords[2]
@@ -54,7 +54,7 @@ RegisterNetEvent('txsv:req:bringPlayer', function(id)
   if allow then
     -- ensure the target player ped exists
     local ped = GetPlayerPed(id)
-    if ped then
+    if ped and ped ~= 0 then
       local coords = GetEntityCoords(GetPlayerPed(src))
       TriggerClientEvent('txcl:tpToCoords', id, coords[1], coords[2], coords[3])
     end

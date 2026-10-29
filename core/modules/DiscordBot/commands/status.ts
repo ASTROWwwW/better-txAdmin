@@ -85,7 +85,9 @@ export const generateStatusMessage = (
         const tempFlag = (schedule.nextIsTemp) ? '(tmp)' : '';
         const relativeTime = msToShortishDuration(schedule.nextRelativeMs);
         const isLessThanMinute = schedule.nextRelativeMs < 60_000;
-        if (isLessThanMinute) {
+        if (schedule.nextIsDelayed) {
+            placeholders.nextScheduledRestart = `delayed, waiting for players ${tempFlag}`;
+        } else if (isLessThanMinute) {
             placeholders.nextScheduledRestart = `right now ${tempFlag}`;
         } else {
             placeholders.nextScheduledRestart = `in ${relativeTime} ${tempFlag}`;
@@ -94,8 +96,9 @@ export const generateStatusMessage = (
 
     //Prepare status placeholders
     if (fxMonitorStatus.health === FxMonitorHealth.ONLINE) {
-        placeholders.statusString = embedConfigJson?.onlineString ?? '🟢 Online';
-        placeholders.statusColor = embedConfigJson?.onlineColor ?? "#0BA70B";
+        const isAdminOnly = txConfig.whitelist.mode === 'adminOnly';
+        placeholders.statusString = isAdminOnly ? embedConfigJson?.maintenanceString ?? '🟠 Maintenance' : embedConfigJson?.onlineString ?? '🟢 Online';
+        placeholders.statusColor = isAdminOnly ? embedConfigJson?.maintenanceColor ?? "#FD8C4C" : embedConfigJson?.onlineColor ?? "#0BA70B";
     } else if (fxMonitorStatus.health === FxMonitorHealth.PARTIAL) {
         placeholders.statusString = embedConfigJson?.partialString ?? '🟡 Partial';
         placeholders.statusColor = embedConfigJson?.partialColor ?? "#FFF100";

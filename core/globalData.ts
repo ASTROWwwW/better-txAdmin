@@ -5,6 +5,7 @@ import slash from 'slash';
 
 import consoleFactory, { setConsoleEnvData } from '@lib/console';
 import { addLocalIpAddress } from '@lib/host/isIpAddressLocal';
+import { parseIpRanges } from '@lib/host/isIpInRanges';
 import { parseFxserverVersion } from '@lib/fxserver/fxsVersionParser';
 import { parseTxDevEnv, TxDevEnvType } from '@shared/txDevEnv';
 import { Overwrite } from 'utility-types';
@@ -295,6 +296,19 @@ if (netInterface) {
     addLocalIpAddress(netInterface);
 }
 
+//Proxy IP range
+const proxyIpRangeRaw = handleMultiVar(
+    'PROXY_IP_RANGE',
+    hostEnvVarSchemas.PROXY_IP_RANGE,
+    hostVars.PROXY_IP_RANGE,
+    undefined,
+    nativeVars.txAdminProxyIpRange,
+);
+const proxyIpRanges = proxyIpRangeRaw ? parseIpRanges(proxyIpRangeRaw) : undefined;
+if (proxyIpRanges) {
+    console.warn('Proxy support enabled. Trusted proxy IP ranges:', proxyIpRangeRaw!.join(', '));
+}
+
 
 /**
  * MARK: GENERAL
@@ -474,7 +488,7 @@ if (ignoreDeprecatedConfigs) {
 
 const isPterodactyl = !isWindows && process.env?.TXADMIN_ENABLE === '1';
 const isZapHosting = providerName === 'ZAP-Hosting';
-const setConsoleTitle = !(isPterodactyl || isZapHosting || providerName); //assume not a terminal
+const setConsoleTitle = !(isPterodactyl || isZapHosting || providerName || hostVars.DISABLE_TTY_TITLE); //assume not a terminal
 
 
 //FXServer Display Version
@@ -554,6 +568,7 @@ export const txHostConfig = Object.freeze({
     txaPort,
     fxsPort,
     netInterface,
+    proxyIpRanges,
 
     //Provider
     providerName,

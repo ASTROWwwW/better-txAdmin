@@ -85,11 +85,25 @@ const taskDownloadFile = async (options, basePath, deployerCtx) => {
  * If the directory structure does not exist, it is created.
  */
 const githubRepoSourceRegex = /^((https?:\/\/github\.com\/)?|@)?([\w.\-_]+)\/([\w.\-_]+).*$/;
+const isDotsOnly = (segment) => /^\.+$/.test(segment);
+const isGithubSrcValid = (src) => {
+    const match = typeof src == 'string' && src.match(githubRepoSourceRegex);
+    return !!match && !!match[3] && !!match[4] && !isDotsOnly(match[3]) && !isDotsOnly(match[4]);
+};
+//The ref goes in the url path after being encoded segment by segment, so what matters
+//is that it cannot be an empty, `.` or `..` segment, or carry control characters.
+const isGitRefValid = (ref) => (
+    typeof ref == 'string'
+    && ref.length > 0
+    && ref.length <= 200
+    && !/[\x00-\x20\x7f\\]/.test(ref)
+    && ref.split('/').every((segment) => segment.length && !isDotsOnly(segment))
+);
 const validatorDownloadGithub = (options) => {
     return (
-        typeof options.src == 'string'
+        isGithubSrcValid(options.src)
         && isPathValid(options.dest, false)
-        && (typeof options.ref == 'string' || typeof options.ref == 'undefined')
+        && (typeof options.ref == 'undefined' || options.ref === '' || isGitRefValid(options.ref))
         && (typeof options.subpath == 'string' || typeof options.subpath == 'undefined')
     );
 };
@@ -97,10 +111,17 @@ const taskDownloadGithub = async (options, basePath, deployerCtx) => {
     if (!validatorDownloadGithub(options)) throw new Error('invalid options');
     //FIXME: caso seja eperm, tentar criar um arquivo na pasta e checar se funciona
 
+    const githubToken = process.env.GITHUB_TOKEN;
+    const githubApiHeaders = githubToken
+        ? { Authorization: `Bearer ${githubToken}` }
+        : {};
+
     //Parsing source
     deployerCtx.$step = 'task start';
     const srcMatch = options.src.match(githubRepoSourceRegex);
-    if (!srcMatch || !srcMatch[3] || !srcMatch[4]) throw new Error('invalid repository');
+    if (!srcMatch || !srcMatch[3] || !srcMatch[4] || isDotsOnly(srcMatch[3]) || isDotsOnly(srcMatch[4])) {
+        throw new Error('invalid repository');
+    }
     const repoOwner = srcMatch[3];
     const repoName = srcMatch[4];
 
@@ -112,7 +133,8 @@ const taskDownloadGithub = async (options, basePath, deployerCtx) => {
         const data = await got.get(
             `https://api.github.com/repos/${repoOwner}/${repoName}`,
             {
-                timeout: { request: 15e3 }
+                timeout: { request: 15e3 },
+                headers: githubApiHeaders,
             }
         ).json();
         if (typeof data !== 'object' || !data.default_branch) {
@@ -123,7 +145,8 @@ const taskDownloadGithub = async (options, basePath, deployerCtx) => {
     deployerCtx.$step = 'ref set';
 
     //Preparing vars
-    const downURL = `https://api.github.com/repos/${repoOwner}/${repoName}/zipball/${reference}`;
+    const encodedRef = reference.split('/').map(encodeURIComponent).join('/');
+    const downURL = `https://api.github.com/repos/${repoOwner}/${repoName}/zipball/${encodedRef}`;
     const tmpFilePath = path.join(basePath, `.${(Date.now() % 100000000).toString(36)}.download`);
     const destPath = safePath(basePath, options.dest);
 
@@ -132,6 +155,7 @@ const taskDownloadGithub = async (options, basePath, deployerCtx) => {
     const gotOptions = {
         timeout: { request: 150e3 },
         retry: { limit: 5 },
+        headers: githubApiHeaders,
     };
     const gotStream = got.stream(downURL, gotOptions);
     gotStream.on('downloadProgress', (progress) => {

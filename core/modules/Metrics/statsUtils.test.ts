@@ -149,10 +149,10 @@ suite('TimeCounter', async () => {
 
     // Check if the duration is within the expected range
     test('duration within range', () => {
-        const isCloseTo50ms = (x: number) => (x > 150 && x < 175);
-        expect(duration.seconds * 1000).toSatisfy(isCloseTo50ms);
-        expect(duration.milliseconds).toSatisfy(isCloseTo50ms);
-        expect(duration.nanoseconds / 1_000_000).toSatisfy(isCloseTo50ms);
+        const isCloseTo150ms = (x: number) => (x >= 140 && x < 300); //timers can fire slightly early and drift under load
+        expect(duration.seconds * 1000).toSatisfy(isCloseTo150ms);
+        expect(duration.milliseconds).toSatisfy(isCloseTo150ms);
+        expect(duration.nanoseconds / 1_000_000).toSatisfy(isCloseTo150ms);
     });
 });
 

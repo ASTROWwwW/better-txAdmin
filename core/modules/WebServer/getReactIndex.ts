@@ -104,7 +104,7 @@ export default async function getReactIndex(ctx: CtxWithVars | AuthedCtx) {
     //Checking if already logged in
     const authResult = checkRequestAuth(
         ctx.request.headers,
-        ctx.ip,
+        ctx.txVars.realIP,
         ctx.txVars.isLocalRequest,
         ctx.sessTools
     );

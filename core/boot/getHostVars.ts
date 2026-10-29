@@ -3,6 +3,7 @@ import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import fatalError from '@lib/fatalError';
 import consts from '@shared/consts';
+import { proxyIpRangeSchema } from '@lib/host/isIpInRanges';
 
 
 /**
@@ -27,6 +28,7 @@ export const hostEnvVarSchemas = {
     ),
     MAX_SLOTS: z.coerce.number().int().positive(),
     QUIET_MODE: z.preprocess((val) => val === 'true', z.boolean()),
+    DISABLE_TTY_TITLE: z.preprocess((val) => val === 'true', z.boolean()),
 
     //Networking
     TXA_URL: z.string().url(),
@@ -38,7 +40,8 @@ export const hostEnvVarSchemas = {
         (val) => val < 40120 || val > 40150,
         'FXS_PORT cannot be between 40120 and 40150'
     ),
-    INTERFACE: z.string().ip({ version: "v4" }),
+    INTERFACE: z.string().ip(),
+    PROXY_IP_RANGE: proxyIpRangeSchema,
 
     //Provider
     PROVIDER_NAME: z.string()

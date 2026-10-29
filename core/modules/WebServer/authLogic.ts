@@ -2,6 +2,7 @@ const modulename = 'WebServer:AuthLogic';
 import { z } from "zod";
 import { txEnv } from '@core/globalData';
 import consoleFactory from '@lib/console';
+import { parseIdentifiersHeader } from '@lib/player/idUtils';
 import type { SessToolsType } from "./middlewares/sessionMws";
 import { ReactAuthDataType } from "@shared/authApiTypes";
 const console = consoleFactory(modulename);
@@ -253,9 +254,10 @@ export const nuiAuthLogic = (
         }
 
         // Check identifier array
-        const identifiers = reqHeader['x-txadmin-identifiers']
-            .split(',')
-            .filter((i) => i.length);
+        const identifiers = parseIdentifiersHeader(reqHeader['x-txadmin-identifiers']);
+        if (!identifiers) {
+            return failResp('Unauthorized: malformed identifier header');
+        }
         if (!identifiers.length) {
             return failResp('Unauthorized: empty identifier array');
         }

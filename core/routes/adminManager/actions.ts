@@ -158,6 +158,7 @@ async function handleEdit(ctx: AuthedCtx) {
     //Sanity check
     if (
         typeof ctx.request.body.name !== 'string'
+        || typeof ctx.request.body.originalName !== 'string'
         || typeof ctx.request.body.citizenfxID !== 'string'
         || typeof ctx.request.body.discordID !== 'string'
         || ctx.request.body.permissions === undefined
@@ -166,13 +167,20 @@ async function handleEdit(ctx: AuthedCtx) {
     }
 
     //Prepare and filter variables
-    const name = ctx.request.body.name.trim();
+    const originalName = ctx.request.body.originalName.trim();
+    const newName = ctx.request.body.name.trim();
+    const isNameChanged = originalName !== newName; //case-only changes are renames too
     const citizenfxID = ctx.request.body.citizenfxID.trim();
     const discordID = ctx.request.body.discordID.trim();
 
     //Check if editing himself
-    if (ctx.admin.name.toLowerCase() === name.toLowerCase()) {
+    if (ctx.admin.name.toLowerCase() === originalName.toLowerCase()) {
         return ctx.send({ type: 'danger', message: '(ERR0) You cannot edit yourself.' });
+    }
+
+    // Check if the name is being changed, and if so check if the new value is valid
+    if (isNameChanged && !consts.regexValidFivemUsername.test(newName)) {
+        return ctx.send({type: 'danger', markdown: true, message: `**(ERR1) Invalid username, it must follow the rule:**\n${nameRegexDesc}`});
     }
 
     //Validate & translate permissions
@@ -229,7 +237,7 @@ async function handleEdit(ctx: AuthedCtx) {
     }
 
     //Check if admin exists
-    const admin = txCore.adminStore.getAdminByName(name);
+    const admin = txCore.adminStore.getAdminByName(originalName);
     if (!admin) return ctx.send({ type: 'danger', message: 'Admin not found.' });
 
     //Check if editing an master admin
@@ -262,6 +270,9 @@ async function handleEdit(ctx: AuthedCtx) {
             changes.push(`Removed permissions: ${JSON.stringify(permsRemoved)}.`);
         }
     }
+    if (isNameChanged) {
+        changes.push(`Renamed to '${newName}'.`);
+    }
     const prevCfxId = admin.providers?.citizenfx?.identifier;
     if (!prevCfxId && citizenfxData) {
         changes.push(`Added Cfx.re ID: ${citizenfxData.identifier}.`);
@@ -281,13 +292,13 @@ async function handleEdit(ctx: AuthedCtx) {
 
     //Add admin and give output
     try {
-        let logMessage = `Editing user '${name}'`;
+        let logMessage = `Editing user '${originalName}'`;
         if (changes.length) {
             logMessage += `: ${changes.join(' ')}`;
         } else {
             logMessage += '. No changes were made.';
         }
-        await txCore.adminStore.editAdmin(name, null, citizenfxData, discordData, permissions);
+        await txCore.adminStore.editAdmin(originalName, null, citizenfxData, discordData, permissions, isNameChanged ? newName : undefined);
         ctx.admin.logAction(logMessage);
         return ctx.send({ type: 'success', refresh: true });
     } catch (error) {

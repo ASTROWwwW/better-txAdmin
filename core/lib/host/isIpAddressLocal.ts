@@ -12,8 +12,11 @@ const extendedAllowedLanIps: string[] = [];
  * This is used to secure the webpipe auth and the rate limiter.
  */
 export const isIpAddressLocal = (ipAddress: string): boolean => {
+    //A zone id (`%eth0`) makes it a link scoped address, never one of the ranges below
+    if (ipAddress.includes('%')) return extendedAllowedLanIps.includes(ipAddress);
     return (
-        /^(127\.|192\.168\.|10\.|::1|fd00::)/.test(ipAddress)
+        /^(127\.|::ffff:127\.|192\.168\.|::ffff:192\.168\.|10\.|::ffff:10\.|fd00::)/.test(ipAddress)
+        || ipAddress === '::1'
         || extendedAllowedLanIps.includes(ipAddress)
     )
 }
@@ -26,4 +29,13 @@ export const isIpAddressLocal = (ipAddress: string): boolean => {
 export const addLocalIpAddress = (ipAddress: string): void => {
     // console.verbose.debug(`Adding local IP address: ${ipAddress}`);
     extendedAllowedLanIps.push(ipAddress);
+}
+
+
+/**
+ * Formats a host:port string, wrapping IPv6 addresses in brackets per RFC 3986.
+ */
+export const formatHostPort = (host: string, port: number | string): string => {
+    if (host.includes(':')) return `[${host}]:${port}`;
+    return `${host}:${port}`;
 }

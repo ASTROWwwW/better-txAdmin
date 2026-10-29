@@ -9,6 +9,7 @@ import serverlogRoom from './wsRooms/serverlog';
 import { AuthedAdminType, checkRequestAuth } from './authLogic';
 import { SocketWithSession } from './ctxTypes';
 import { isIpAddressLocal } from '@lib/host/isIpAddressLocal';
+import { resolveProxyRealIp } from '@lib/host/resolveProxyRealIp';
 import { txEnv } from '@core/globalData';
 const console = consoleFactory(modulename);
 
@@ -34,7 +35,10 @@ type RoomNames = typeof VALID_ROOMS[number];
 
 //Helpers
 const getIP = (socket: SocketWithSession) => {
-    return socket?.request?.socket?.remoteAddress ?? 'unknown';
+    const socketIp = socket?.request?.socket?.remoteAddress ?? 'unknown';
+    const xff = socket?.request?.headers?.['x-forwarded-for'];
+    const xffStr = Array.isArray(xff) ? xff[0] : xff;
+    return resolveProxyRealIp(socketIp, xffStr) ?? socketIp;
 };
 const terminateSession = (socket: SocketWithSession, reason: string, shouldLog = true) => {
     try {
@@ -110,7 +114,8 @@ export default class WebSocket {
             );
             if (!authResult.success) {
                 //@ts-ignore
-                return terminateSession(socket, 'session invalidated by websocket.reCheckAdminAuths()', true);
+                terminateSession(socket, 'session invalidated by websocket.reCheckAdminAuths()', true);
+                continue;
             }
 
             //Sending auth data update - even if nothing changed
@@ -186,11 +191,26 @@ export default class WebSocket {
                     if (commandData.permission === true || authedAdmin.hasPermission(commandData.permission)) {
                         socket.on(commandName, (...args) => {
                             //Checking if admin is still in the room - perms change can make them be kicked out of room
-                            if (socket.rooms.has(requestedRoomName)) {
-                                commandData.handler(authedAdmin, ...args);
-                            } else {
+                            if (!socket.rooms.has(requestedRoomName)) {
                                 console.verbose.debug('SocketIO', `Command '${requestedRoomName}#${commandName}' was ignored due to admin not being in the room.`);
+                                return;
                             }
+
+                            //Re-checking the auth, as the admin might have lost the command permission after connecting
+                            const currAuthResult = checkRequestAuth(
+                                socket.handshake.headers,
+                                reqIp,
+                                isIpAddressLocal(reqIp),
+                                socket.sessTools
+                            );
+                            if (
+                                !currAuthResult.success
+                                || (commandData.permission !== true && !currAuthResult.admin.hasPermission(commandData.permission))
+                            ) {
+                                console.verbose.debug('SocketIO', `Command '${requestedRoomName}#${commandName}' was ignored due to missing permission.`);
+                                return;
+                            }
+                            commandData.handler(currAuthResult.admin, ...args);
                         });
                     }
                 }

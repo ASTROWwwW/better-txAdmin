@@ -5,7 +5,7 @@ import { cloneDeep } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import { txHostConfig } from '@core/globalData';
 import CfxProvider from './providers/CitizenFX.js';
-import { createHash } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import consoleFactory from '@lib/console.js';
 import fatalError from '@lib/fatalError.js';
 import { chalkInversePad } from '@lib/misc.js';
@@ -112,7 +112,7 @@ export default class AdminStore {
         //Printing PIN or starting loop
         if (!adminFileExists) {
             if (!txHostConfig.defaults.account) {
-                this.addMasterPin = (Math.random() * 10000).toFixed().padStart(4, '0');
+                this.addMasterPin = randomInt(10000).toString().padStart(4, '0');
                 this.admins = false;
             } else {
                 const { username, fivemId, password } = txHostConfig.defaults.account;
@@ -410,8 +410,9 @@ export default class AdminStore {
      * @param {object|false} [citizenfxData] or false
      * @param {object|false} [discordData] or false
      * @param {string[]} [permissions]
+     * @param {string} [newName] the new username, keeps the current one if undefined
      */
-    async editAdmin(name, password, citizenfxData, discordData, permissions) {
+    async editAdmin(name, password, citizenfxData, discordData, permissions, newName) {
         if (this.admins == false) throw new Error('Admins not set');
 
         //Find admin index
@@ -420,6 +421,19 @@ export default class AdminStore {
             return (username === user.name.toLowerCase());
         });
         if (adminIndex == -1) throw new Error('Admin not found');
+
+        // Check if name is being changed, if so change the old name to the new one
+        if (typeof newName === 'string') {
+            // Check if the name is already taken by another admin
+            const nameExists = this.admins.some((admin, index) => {
+                return index !== adminIndex && admin.name.toLowerCase() === newName.toLowerCase();
+            })
+            if (nameExists) {
+                throw new Error("This username is already taken");
+            }
+
+            this.admins[adminIndex].name = newName;
+        }
 
         //Editing admin
         if (password !== null) {
@@ -619,7 +633,10 @@ export default class AdminStore {
      */
     async refreshOnlineAdmins() {
         //Refresh auth of all admins connected to socket.io
-        txCore.webServer.webSocket.reCheckAdminAuths().catch((e) => { });
+        txCore.webServer.webSocket.reCheckAdminAuths().catch((error) => {
+            console.verbose.error('Failed to reCheckAdminAuths() with error:');
+            console.verbose.dir(error);
+        });
 
         try {
             //Getting all admin identifiers

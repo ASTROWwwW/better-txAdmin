@@ -101,6 +101,15 @@ RegisterNetEvent('txsv:webpipe:req', function(callbackId, method, path, headers,
     return
   end
 
+  -- Header names are case insensitive for the web server, so a client could add its own copy of the auth headers
+  -- or of the proxy headers used to resolve the client ip
+  for name in pairs(headers) do
+    local lowerName = type(name) == 'string' and name:lower()
+    if not lowerName or lowerName:sub(1, 10) == 'x-txadmin-' or lowerName:sub(1, 12) == 'x-forwarded-' then
+      headers[name] = nil
+    end
+  end
+
   -- Adding admin identifiers for auth middleware to deal with
   headers['X-TxAdmin-Token'] = TX_LUACOMTOKEN
   headers['X-TxAdmin-Identifiers'] = table.concat(GetPlayerIdentifiers(s), ',')
