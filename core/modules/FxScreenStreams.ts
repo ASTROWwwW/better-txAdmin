@@ -14,7 +14,9 @@ const NO_VIEWER_MS = 15_000;
 const FIRST_FRAME_MS = 12_000;
 const STALLED_MS = 20_000; //a stream that was running and stopped sending (player left, game closed)
 const ENDED_KEPT_MS = 60_000; //so the panel can still read why it ended
-const MIN_FRAME_GAP_MS = 30; //more than ~30 frames a second is dropped
+const RATE_TOLERANCE = 1.5; //at most this many times the rate that was asked for is shown in any second
+const RATE_WINDOW_MS = 1_000; //a window and not a gap between two frames: the game sends two at once, they can come in bursts
+const STUCK_VIEWER_MS = 5_000; //a viewer that does not read for this long is cut
 const MAX_FRAME_CHARS = 400_000; //base64, the intercom body limit is 768kb
 const FPS_WINDOW_MS = 3_000;
 const CHECK_INTERVAL_MS = 1_000;
@@ -36,15 +38,24 @@ export class ScreenStreamError extends Error {
 }
 export type ScreenStreamEndReason =
     | 'closed' | 'replaced' | 'no_viewer' | 'time_limit' | 'failed_to_start' | 'stalled' | 'revoked' | 'server_closed' | 'shutdown';
-type StreamPlayer = { netid: number; displayName: string; isConnected: boolean };
-type StreamViewerRes = Pick<ServerResponse, 'writeHead' | 'write' | 'end' | 'on'> & { writableNeedDrain?: boolean };
+type StreamPlayer = { netid: number; displayName: string; isConnected: boolean; license?: string };
+type StreamViewerRes = Pick<ServerResponse, 'writeHead' | 'write' | 'end' | 'on'> & {
+    writableNeedDrain?: boolean;
+    writableEnded?: boolean;
+    destroyed?: boolean;
+    destroy?: () => unknown;
+};
 type Session = {
     id: string;
     token: string; //what the player uses to upload
     viewToken: string; //what the admin's browser uses to watch, never sent to the player
     adminName: string;
     netid: number;
+    license: string | undefined; //the netid is reused by the next player that joins
     displayName: string;
+    fps: number; //what was asked for, the frames that come are held to it
+    width: number;
+    credentials: string; //what the admin logs in with, a change ends the view
     since: number;
     lastFrameAt: number;
     frameTimes: number[];
@@ -52,6 +63,7 @@ type Session = {
     bytes: number;
     dropped: number;
     viewers: Set<StreamViewerRes>;
+    drainingSince: Map<StreamViewerRes, number>; //viewers that do not read
     noViewerSince: number | undefined;
     endedAt: number | undefined;
     endReason: ScreenStreamEndReason | undefined;
@@ -104,8 +116,13 @@ export default class FxScreenStreams {
 
         const existing = [...this.#sessions.values()].find((s) => !s.endedAt && s.netid === player.netid);
         if (existing) {
-            if (existing.adminName !== adminName) throw new ScreenStreamError('busy');
-            this.#end(existing, 'replaced');
+            if (existing.license !== player.license) {
+                this.#end(existing, 'stalled'); //the player of that view left and another one got their netid
+            } else if (existing.adminName !== adminName) {
+                throw new ScreenStreamError('busy');
+            } else {
+                this.#end(existing, 'replaced');
+            }
         }
         const active = [...this.#sessions.values()].filter((s) => !s.endedAt).length;
         if (active >= MAX_SESSIONS) throw new ScreenStreamError('too_many');
@@ -119,7 +136,11 @@ export default class FxScreenStreams {
             viewToken: randomBytes(18).toString('base64url'),
             adminName,
             netid: player.netid,
+            license: player.license,
             displayName: player.displayName,
+            fps,
+            width,
+            credentials: this.#getCredentials(adminName),
             since: Date.now(),
             lastFrameAt: 0,
             frameTimes: [],
@@ -127,6 +148,7 @@ export default class FxScreenStreams {
             bytes: 0,
             dropped: 0,
             viewers: new Set(),
+            drainingSince: new Map(),
             noViewerSince: Date.now(),
             endedAt: undefined,
             endReason: undefined,
@@ -158,13 +180,18 @@ export default class FxScreenStreams {
             this.#end(session, 'time_limit');
             return { stop: true };
         }
-        if (now - session.lastFrameAt < MIN_FRAME_GAP_MS) return { ok: true };
+        const recentFrames = session.frameTimes.filter((t) => now - t < RATE_WINDOW_MS).length;
+        if (recentFrames >= Math.ceil(session.fps * RATE_TOLERANCE)) return { ok: true };
 
         if (typeof frame !== 'string' || frame.length > MAX_FRAME_CHARS || !BASE64_REGEX.test(frame)) {
             return { ok: true };
         }
         const jpeg = Buffer.from(frame, 'base64');
-        if (!isJpeg(jpeg) || getImageSize(jpeg)?.type !== 'jpeg' || !isSafeImage(jpeg)) return { ok: true };
+        if (!isJpeg(jpeg) || !isSafeImage(jpeg)) return { ok: true };
+        //The game scales to the width that was asked for, so anything bigger is not a frame of this stream.
+        //The height is only bounded loosely, screens can be portrait.
+        const size = getImageSize(jpeg);
+        if (size?.type !== 'jpeg' || size.width > session.width || size.height > session.width * 2) return { ok: true };
 
         session.lastFrameAt = now;
         session.frames++;
@@ -176,8 +203,10 @@ export default class FxScreenStreams {
         for (const res of session.viewers) {
             if (res.writableNeedDrain) {
                 session.dropped++;
+                if (!session.drainingSince.has(res)) session.drainingSince.set(res, now);
                 continue;
             }
+            session.drainingSince.delete(res);
             res.write(header);
             res.write(jpeg);
             res.write('\r\n');
@@ -196,6 +225,8 @@ export default class FxScreenStreams {
         if (session.endedAt || typeof viewToken !== 'string' || !safeEqual(viewToken, session.viewToken)) {
             throw new ScreenStreamError('not_found');
         }
+        //A connection that closed before this point would never tell us, so it would hold the stream open
+        if (res.destroyed || res.writableEnded) throw new ScreenStreamError('not_found');
         if (session.viewers.size >= MAX_VIEWERS) throw new ScreenStreamError('too_many');
 
         res.writeHead(200, {
@@ -209,6 +240,7 @@ export default class FxScreenStreams {
         session.noViewerSince = undefined;
         const detach = () => {
             session.viewers.delete(res);
+            session.drainingSince.delete(res);
             if (!session.viewers.size && !session.endedAt) session.noViewerSince = Date.now();
         };
         res.on('close', detach);
@@ -222,14 +254,13 @@ export default class FxScreenStreams {
     getStatus(sessionId: string, adminName: string) {
         const session = this.#getOwned(sessionId, adminName);
         const now = Date.now();
-        const span = session.frameTimes.length > 1
-            ? session.frameTimes[session.frameTimes.length - 1] - session.frameTimes[0]
-            : 0;
+        const times = session.frameTimes.filter((t) => now - t <= FPS_WINDOW_MS); //a player that stopped sending has no rate
+        const span = times.length > 1 ? times[times.length - 1] - times[0] : 0;
         return {
             state: session.endedAt ? 'ended' as const : session.frames ? 'live' as const : 'waiting' as const,
             reason: session.endReason,
             frames: session.frames,
-            fps: span > 0 ? Math.round(((session.frameTimes.length - 1) / span) * 10_000) / 10 : 0,
+            fps: span > 0 ? Math.round(((times.length - 1) / span) * 10_000) / 10 : 0,
             bytes: session.bytes,
             ageMs: (session.endedAt ?? now) - session.since,
         };
@@ -275,12 +306,23 @@ export default class FxScreenStreams {
     /**
      * The admin can be deleted or lose the permission while watching, like it is rechecked for websockets.
      */
-    #adminMaySpectate(adminName: string) {
+    #adminMaySpectate(adminName: string, credentials: string) {
         const admin = txCore.adminStore.getAdminByName(adminName);
         if (!admin) return false;
+        if (this.#getCredentials(adminName) !== credentials) return false;
         return admin.master === true
             || (Array.isArray(admin.permissions)
                 && (admin.permissions.includes('all_permissions') || admin.permissions.includes('players.spectate')));
+    }
+
+
+    /**
+     * What the admin logs in with: the sessions that were opened with another password or cfx.re account are over,
+     * and the panel session cannot be looked at from here.
+     */
+    #getCredentials(adminName: string) {
+        const admin = txCore.adminStore.getAdminByName(adminName);
+        return `${admin?.password_hash}|${admin?.providers?.citizenfx?.identifier}`;
     }
 
 
@@ -288,8 +330,13 @@ export default class FxScreenStreams {
         session.endedAt = Date.now();
         session.endReason = reason;
         if (tellServer) txCore.fxRunner.sendEvent('screenStreamStop', { sessionId: session.id });
-        for (const res of session.viewers) res.end();
+        for (const res of session.viewers) {
+            res.end();
+            //end() waits for the buffered data to be read, a connection that does not read would stay open
+            if (res.writableNeedDrain) res.destroy?.();
+        }
         session.viewers.clear();
+        session.drainingSince.clear();
 
         const seconds = Math.max(1, Math.round((session.endedAt - session.since) / 1000));
         const avgFps = Math.round((session.frames / seconds) * 10) / 10;
@@ -308,7 +355,13 @@ export default class FxScreenStreams {
                 if (now - session.endedAt > ENDED_KEPT_MS) this.#sessions.delete(id);
                 continue;
             }
-            if (!this.#adminMaySpectate(session.adminName)) {
+            for (const [res, since] of session.drainingSince) {
+                if (now - since > STUCK_VIEWER_MS) {
+                    session.drainingSince.delete(res);
+                    res.destroy?.(); //its 'close' detaches it
+                }
+            }
+            if (!this.#adminMaySpectate(session.adminName, session.credentials)) {
                 this.#end(session, 'revoked');
             } else if (now - session.since >= SESSION_MAX_MS) {
                 this.#end(session, 'time_limit');

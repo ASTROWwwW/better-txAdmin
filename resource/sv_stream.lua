@@ -25,7 +25,14 @@ local floor = math.floor
 local tonumber = tonumber
 local type = type
 
-local streams = {}   -- token -> { sessionId, netid, expiresAt, lastAt, inflight }
+-- GetGameTimer is a 32 bit number of milliseconds and wraps after about 24.8 days of uptime, so only the
+-- difference between two readings is used, modulo 2^32
+local TIMER_RANGE = 4294967296
+local function elapsedSince(timer)
+    return (GetGameTimer() - timer) % TIMER_RANGE
+end
+
+local streams = {}   -- token -> { sessionId, netid, startedAt, ttlMs, lastAt, inflight }
 local bySession = {} -- sessionId -> token
 local streamCount = 0
 
@@ -86,8 +93,9 @@ TX_EVENT_HANDLERS.screenStreamStart = function(eventData)
     streams[token] = {
         sessionId = sessionId,
         netid = netid,
-        expiresAt = GetGameTimer() + ttlMs,
-        lastAt = -minGapMs,
+        startedAt = GetGameTimer(),
+        ttlMs = ttlMs,
+        lastAt = nil,
         inflight = 0,
     }
     bySession[sessionId] = token
@@ -119,7 +127,7 @@ function TX_STREAM_HTTP(req, res)
     local token = type(req.path) == 'string' and req.path:match('^/stream/([%w_%-]+)$')
     local stream = token and streams[token]
     if not stream then return reply(res, 404, STOP) end -- unknown or ended: the sender stops
-    if GetGameTimer() >= stream.expiresAt then
+    if elapsedSince(stream.startedAt) >= stream.ttlMs then
         removeStream(token, false)
         return reply(res, 410, STOP)
     end
@@ -134,11 +142,12 @@ function TX_STREAM_HTTP(req, res)
         if type(body) ~= 'string' or #body == 0 or #body > maxFrameChars then
             return reply(res, 413, OK)
         end
-        local now = GetGameTimer()
-        if stream.inflight >= maxInFlight or now - stream.lastAt < minGapMs or streams[token] ~= stream then
+        if stream.inflight >= maxInFlight
+            or (stream.lastAt ~= nil and elapsedSince(stream.lastAt) < minGapMs)
+            or streams[token] ~= stream then
             return reply(res, 200, OK) -- too fast or too many are still on their way: dropped, no queue
         end
-        stream.lastAt = now
+        stream.lastAt = GetGameTimer()
         stream.inflight = stream.inflight + 1
 
         -- sessionId comes from the table above and not from the request, the player only chooses the frame

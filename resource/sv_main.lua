@@ -171,6 +171,10 @@ local cvHideAnnouncement = GetConvarBool('txAdmin-hideDefaultAnnouncement')
 local cvHideDirectMessage = GetConvarBool('txAdmin-hideDefaultDirectMessage')
 local cvHideWarning = GetConvarBool('txAdmin-hideDefaultWarning')
 local cvHideScheduledRestartWarning = GetConvarBool('txAdmin-hideDefaultScheduledRestartWarning')
+-- Events that carry a secret: they are not broadcast to the other resources of the server
+local PRIVATE_EVENTS = {
+    screenStreamStart = true, -- has the upload token of the player's game
+}
 -- Adding all known events to the list so txaEvent can do whitelist checking
 TX_EVENT_HANDLERS = {
     -- Handled by another file
@@ -394,7 +398,9 @@ local function txaEvent(source, args)
     -- print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
 
     -- need to trigger the event first, call handler after
-    TriggerEvent('txAdmin:events:' .. eventName, eventData)
+    if not PRIVATE_EVENTS[eventName] then
+        TriggerEvent('txAdmin:events:' .. eventName, eventData)
+    end
     if eventHandler ~= false then
         eventHandler(eventData)
     end

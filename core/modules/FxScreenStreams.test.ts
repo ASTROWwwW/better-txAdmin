@@ -10,7 +10,7 @@ const jpegBytes = (n = 50, width = 640, height = 360) => Buffer.concat([
     Buffer.from([0xff, 0xda]), be16(8), Buffer.alloc(6, 2), Buffer.alloc(n, 7), Buffer.from([0xff, 0xd9]),
 ]);
 const FRAME = jpegBytes().toString('base64');
-const player = (extra = {}) => ({ netid: 12, displayName: 'Bob', isConnected: true, ...extra });
+const player = (extra = {}) => ({ netid: 12, displayName: 'Bob', isConnected: true, license: 'lic-bob', ...extra });
 const fakeRes = () => {
     const chunks: Buffer[] = [];
     const listeners: Record<string, Function[]> = {};
@@ -21,9 +21,12 @@ const fakeRes = () => {
         writeHead(status: number, headers: any) { this.status = status; this.headers = headers; },
         write(chunk: any) { chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)); return true; },
         end() { this.ended = true; },
+        destroy() { this.destroyed = true; this.emit('close'); },
         on(event: string, fn: Function) { (listeners[event] ??= []).push(fn); },
         emit(event: string) { (listeners[event] ?? []).forEach((fn) => fn()); },
         ended: false,
+        destroyed: false,
+        writableEnded: false,
         status: 0,
     };
 };
@@ -36,6 +39,7 @@ suite('FxScreenStreams', () => {
     let adminRecord: any;
 
     const start = (admin = 'admin', p = player(), opts = {}) => streams.start(admin, p, opts);
+    const endedWith = (s) => streams.getStatus(s.sessionId, 'admin');
     const codeOf = (fn: () => unknown) => {
         try { fn(); } catch (error) { return (error as ScreenStreamError).code; }
         return 'ok';
@@ -97,6 +101,19 @@ suite('FxScreenStreams', () => {
             setup();
             expect(codeOf(() => start('admin', p))).toBe(code);
             expect(sendEvent).not.toHaveBeenCalled();
+        });
+
+        it('a netid that now belongs to another player does not keep the old view in the way (the old player left)', () => {
+            const old = start('admin', player({ license: 'lic-old' }));
+            const other = streams.start('other', player({ license: 'lic-new', displayName: 'Carl' }), {});
+            expect(other.sessionId).toBeTruthy();
+            expect(streams.getStatus(old.sessionId, 'admin')).toMatchObject({ state: 'ended', reason: 'stalled' });
+            expect(sendEvent).toHaveBeenCalledWith('screenStreamStop', { sessionId: old.sessionId });
+        });
+
+        it('the same player with the same license is still refused to another admin', () => {
+            start('admin', player({ license: 'lic-bob' }));
+            expect(codeOf(() => start('other', player({ license: 'lic-bob' })))).toBe('busy');
         });
 
         it('refuses a player another admin is already watching', () => {
@@ -196,17 +213,86 @@ suite('FxScreenStreams', () => {
             expect(streams.handleFrame(s.sessionId, FRAME)).toEqual({ stop: true });
         });
 
-        it('drops frames that come faster than 30 per second instead of showing them', () => {
+        it('shows at most 1.5 times the rate that was asked for in any second (12 fps asked: 18 frames), the rest is dropped', () => {
             const s = start();
             const res = fakeRes();
             streams.attachViewer(s.sessionId, s.viewToken, 'admin', res);
+            for (let i = 0; i < 40; i++) { //40 frames in 400 ms
+                streams.handleFrame(s.sessionId, FRAME);
+                vi.setSystemTime(Date.now() + 10);
+            }
+            expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(18);
+            vi.setSystemTime(Date.now() + 1_000); //the window moved on
             streams.handleFrame(s.sessionId, FRAME);
-            vi.setSystemTime(Date.now() + 10);
-            expect(streams.handleFrame(s.sessionId, FRAME)).toEqual({ ok: true });
+            expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(19);
+        });
+
+        it('allows a faster rate for a faster stream (20 fps asked: 30 frames a second)', () => {
+            const s = start('admin', player(), { fps: 20 });
+            for (let i = 0; i < 60; i++) {
+                streams.handleFrame(s.sessionId, FRAME);
+                vi.setSystemTime(Date.now() + 5);
+            }
+            expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(30);
+        });
+
+        it('lets frames come in bursts: two frames a few ms apart after a hiccup are both shown (the game sends two in flight)', () => {
+            const s = start();
+            streams.handleFrame(s.sessionId, FRAME);
+            vi.setSystemTime(Date.now() + 5);
+            streams.handleFrame(s.sessionId, FRAME);
+            vi.setSystemTime(Date.now() + 5);
+            streams.handleFrame(s.sessionId, FRAME);
+            expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(3);
+        });
+
+        it('a steady stream at the asked rate loses nothing', () => {
+            const s = start();
+            for (let i = 0; i < 60; i++) {
+                vi.setSystemTime(Date.now() + 83);
+                streams.handleFrame(s.sessionId, FRAME);
+            }
+            expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(60);
+        });
+
+        it('discards a frame bigger than the width that was asked for (a modified client cannot make the browser decode 4K)', () => {
+            const s = start(); //640 wide
+            const send = (w: number, h: number) => {
+                vi.setSystemTime(Date.now() + 100);
+                streams.handleFrame(s.sessionId, jpegBytes(50, w, h).toString('base64'));
+            };
+            send(1280, 720);
+            send(4096, 2074);
+            send(641, 360);
+            expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(0);
+            send(640, 360);
+            send(320, 180); //smaller is fine, a screen can be smaller than the width
+            send(640, 1280); //a portrait screen
+            expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(3);
+            send(640, 1281);
+            expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(3);
+        });
+
+        it('takes the width of the preset: a 960 stream accepts 960 and not 961', () => {
+            const s = start('admin', player(), { width: 960 });
+            vi.setSystemTime(Date.now() + 100);
+            streams.handleFrame(s.sessionId, jpegBytes(50, 960, 540).toString('base64'));
+            vi.setSystemTime(Date.now() + 100);
+            streams.handleFrame(s.sessionId, jpegBytes(50, 961, 540).toString('base64'));
             expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(1);
-            vi.setSystemTime(Date.now() + 40);
-            streams.handleFrame(s.sessionId, FRAME);
-            expect(streams.getStatus(s.sessionId, 'admin').frames).toBe(2);
+        });
+
+        it('reports 0 fps once the player stopped sending, not the rate it had', async () => {
+            const s = start();
+            for (let i = 0; i < 20; i++) {
+                vi.setSystemTime(Date.now() + 100);
+                streams.handleFrame(s.sessionId, FRAME);
+            }
+            expect(streams.getStatus(s.sessionId, 'admin').fps).toBeGreaterThan(8);
+            vi.setSystemTime(Date.now() + 8_000);
+            const status = streams.getStatus(s.sessionId, 'admin');
+            expect(status.state).toBe('live'); //it only ends as stalled after 20 s
+            expect(status.fps).toBe(0);
         });
 
         it('measures the frames per second the viewer really gets', () => {
@@ -222,6 +308,76 @@ suite('FxScreenStreams', () => {
     });
 
     describe('the viewer side', () => {
+        it.each([['destroyed', { destroyed: true }], ['ended', { writableEnded: true }]])('refuses a connection that is already %s, it would never be detached', (_label, flags) => {
+            const s = start();
+            const res = Object.assign(fakeRes(), flags);
+            expect(codeOf(() => streams.attachViewer(s.sessionId, s.viewToken, 'admin', res))).toBe('not_found');
+            expect(res.headers).toBeUndefined();
+        });
+
+        it('cuts a viewer that stops reading for 5 seconds (a stuck connection must not keep the stream, and the socket, open)', async () => {
+            const s = start();
+            const stuck = fakeRes();
+            const fine = fakeRes();
+            streams.attachViewer(s.sessionId, s.viewToken, 'admin', stuck);
+            streams.attachViewer(s.sessionId, s.viewToken, 'admin', fine);
+            stuck.writableNeedDrain = true;
+            for (let i = 0; i < 4; i++) { //4 seconds of frames dropped for the stuck one
+                streams.handleFrame(s.sessionId, FRAME);
+                await vi.advanceTimersByTimeAsync(1_000);
+            }
+            expect(stuck.destroyed).toBe(false);
+            for (let i = 0; i < 3; i++) {
+                streams.handleFrame(s.sessionId, FRAME);
+                await vi.advanceTimersByTimeAsync(1_000);
+            }
+            expect(stuck.destroyed).toBe(true);
+            expect(fine.destroyed).toBe(false);
+            const before = fine.chunks.length;
+            streams.handleFrame(s.sessionId, FRAME);
+            expect(fine.chunks.length).toBeGreaterThan(before); //the other tab goes on
+        });
+
+        it('a viewer that drains again in time is kept, the 5 seconds start over', async () => {
+            const s = start();
+            const res = fakeRes();
+            streams.attachViewer(s.sessionId, s.viewToken, 'admin', res);
+            for (let round = 0; round < 3; round++) {
+                res.writableNeedDrain = true;
+                for (let i = 0; i < 4; i++) { streams.handleFrame(s.sessionId, FRAME); await vi.advanceTimersByTimeAsync(1_000); }
+                res.writableNeedDrain = false;
+                streams.handleFrame(s.sessionId, FRAME);
+                await vi.advanceTimersByTimeAsync(1_000);
+            }
+            expect(res.destroyed).toBe(false);
+        });
+
+        it('when the only viewer is cut the stream follows 15 seconds later, like any stream nobody watches', async () => {
+            const s = start();
+            const stuck = fakeRes();
+            streams.attachViewer(s.sessionId, s.viewToken, 'admin', stuck);
+            stuck.writableNeedDrain = true;
+            for (let i = 0; i < 7; i++) { streams.handleFrame(s.sessionId, FRAME); await vi.advanceTimersByTimeAsync(1_000); }
+            expect(stuck.destroyed).toBe(true);
+            for (let i = 0; i < 17; i++) { streams.handleFrame(s.sessionId, FRAME); await vi.advanceTimersByTimeAsync(1_000); }
+            expect(endedWith(s)).toMatchObject({ state: 'ended', reason: 'no_viewer' });
+        });
+
+        it('closes the connection of a viewer that is stuck when the stream ends, end() alone would leave the socket', () => {
+            const s = start();
+            const stuck = fakeRes();
+            streams.attachViewer(s.sessionId, s.viewToken, 'admin', stuck);
+            stuck.writableNeedDrain = true;
+            streams.stop('admin', s.sessionId);
+            expect(stuck.ended).toBe(true);
+            expect(stuck.destroyed).toBe(true);
+            const fine = fakeRes();
+            const t = start('admin', player({ netid: 14, license: 'x' }));
+            streams.attachViewer(t.sessionId, t.viewToken, 'admin', fine);
+            streams.stop('admin', t.sessionId);
+            expect(fine.destroyed).toBe(false); //a healthy one is just ended
+        });
+
         it('lets at most 3 viewers watch one stream (browser tabs), a 4th is refused and a freed place can be taken', () => {
             const s = start();
             const viewers = [fakeRes(), fakeRes(), fakeRes()];
@@ -368,6 +524,32 @@ suite('FxScreenStreams', () => {
             expect(endedWith(s).state).toBe('live');
             await vi.advanceTimersByTimeAsync(6_000);
             expect(endedWith(s)).toMatchObject({ state: 'ended', reason: 'time_limit' });
+        });
+
+        it('ends as revoked when the admin password changed (the sessions of that password are over)', async () => {
+            adminRecord = { name: 'admin', master: false, permissions: ['players.spectate'], password_hash: 'hash1' };
+            const s = start();
+            await vi.advanceTimersByTimeAsync(2_000);
+            expect(endedWith(s).state).not.toBe('ended');
+            adminRecord = { ...adminRecord, password_hash: 'hash2' };
+            await vi.advanceTimersByTimeAsync(1_500);
+            expect(endedWith(s)).toMatchObject({ state: 'ended', reason: 'revoked' });
+        });
+
+        it('ends as revoked when the cfx.re account linked to the admin changed', async () => {
+            adminRecord = { name: 'admin', master: false, permissions: ['players.spectate'], providers: { citizenfx: { identifier: 'fivem:1' } } };
+            const s = start();
+            adminRecord = { ...adminRecord, providers: { citizenfx: { identifier: 'fivem:2' } } };
+            await vi.advanceTimersByTimeAsync(1_500);
+            expect(endedWith(s)).toMatchObject({ state: 'ended', reason: 'revoked' });
+        });
+
+        it('is not cut when an admin record is only edited in other ways (name of a role, permissions that still allow it)', async () => {
+            adminRecord = { name: 'admin', master: false, permissions: ['players.spectate'], password_hash: 'hash1' };
+            const s = start();
+            adminRecord = { ...adminRecord, permissions: ['players.spectate', 'players.ban'] };
+            await vi.advanceTimersByTimeAsync(3_000);
+            expect(endedWith(s).state).not.toBe('ended');
         });
 
         it('ends after 10 minutes and has to be started again on purpose', async () => {

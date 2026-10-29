@@ -6,9 +6,11 @@ const URL_REGEX = /^http:\/\/[A-Za-z0-9.\-:[\]]{1,120}\/[A-Za-z0-9_-]{1,64}\/str
 export type StreamMessage = { type: 'start'; cfg: StreamStart } | { type: 'stop' };
 
 /**
- * Reads a message of the page for the live view. The game sends them without a source window, so a message that
- * comes from another window (the web panel runs in an iframe of this page) is ignored, and so is any address that is
- * not an upload address of this resource: frames of the screen are never sent anywhere else.
+ * Reads a message of the page for the live view. The game (cl_stream.lua) sends them without a source window, so a
+ * message that comes from another window (the web panel runs in an iframe of this page) is ignored, and the address
+ * has to have the shape of an upload address of this resource.
+ * NOTE: the host is not pinned, this page cannot know the endpoint the game is connected to. The barrier is that only
+ * this resource's own script sends the message, and it builds the address from the endpoint of the game itself.
  */
 export const parseStreamMessage = (
     message: unknown,

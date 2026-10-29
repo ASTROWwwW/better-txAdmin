@@ -565,6 +565,23 @@ for i in range(1, 12):
 started = [e for e in client_events(lua) if e[0] == 'txcl:screenStreamStart']
 check('at most 8 streams run at once on the server', len(started) == 8, len(started))
 
+# GetGameTimer is a 32 bit number of milliseconds: it wraps after about 24.8 days of uptime
+lua = stream_env()
+lua.execute('NOW = 4294967200')
+stream_start(lua, ttlMs=600000)
+req, res = stream_post(lua)
+lua.eval('CALLBACKS[1]')(200, '{"ok":true}')
+lua.execute('NOW = (4294967200 + 100) % 4294967296')  # 4, the timer wrapped, 100 ms later
+assert lua.eval('NOW') == 4
+req, res = stream_post(lua)
+check('a stream keeps going when the game timer wraps around (no frame dropped as too fast for days)', len(lua.eval('CAPTURED')) == 2 and res['sent'] is None, (len(lua.eval('CAPTURED')), res['sent']))
+lua = stream_env()
+lua.execute('NOW = 4294967000')
+stream_start(lua, ttlMs=60000)
+lua.execute('NOW = (4294967000 + 60001) % 4294967296')
+req, res = stream_post(lua)
+check('and the lifetime is still counted across the wrap', res['code'] in (404, 410) and len(lua.eval('CAPTURED')) == 0, res['code'])
+
 # the client side: the game builds the url itself, from its own server endpoint
 def client_stream_env(endpoint='1.2.3.4:30120'):
     lua = LuaRuntime(unpack_returned_tuples=True, register_eval=False)
@@ -612,6 +629,61 @@ lua = client_stream_env()
 tbl = lua.eval('{ token = "%s", url = "http://evil.example/x", fps = 12 }' % TOKEN)
 lua.eval('HANDLERS["txcl:screenStreamStart"]')(tbl)
 check('a url sent by the server (or another resource) is never used', lua.eval('NUI')[1]['data']['url'] == f'http://1.2.3.4:30120/monitor/stream/{TOKEN}')
+
+# the dispatch of txaEvent in sv_main.lua: events are broadcast to every resource, except the one that carries a token
+def to_lua(lua, value):
+    if isinstance(value, dict):
+        t = lua.table()
+        for k, v in value.items(): t[k] = to_lua(lua, v)
+        return t
+    if isinstance(value, list):
+        t = lua.table()
+        for i, v in enumerate(value): t[i + 1] = to_lua(lua, v)
+        return t
+    return value
+
+def main_env():
+    lua = LuaRuntime(unpack_returned_tuples=True, register_eval=False)
+    lua.execute(PRELUDE)
+    lua.execute("""
+    COMMANDS, BROADCAST, HANDLED = {}, {}, {}
+    function RegisterCommand(name, fn, restricted) COMMANDS[name] = fn end
+    function SetHttpHandler(fn) HTTP_HANDLER = fn end
+    function GetInvokingResource() return nil end
+    function GetCurrentResourceName() return 'monitor' end
+    function txPrintError(...) end
+    function SetConvar() end
+    function GetConvar(n, d)
+      if n == 'txAdmin-luaComHost' then return '127.0.0.1:40120' end
+      if n == 'txAdmin-luaComToken' then return 'secrettoken' end
+      return d
+    end
+    function GetResourceMetadata() return '9.9.9' end
+    function TriggerEvent(name, ...) BROADCAST[#BROADCAST + 1] = name end
+    """)
+    lua.globals().PYDECODE = lambda text: to_lua(lua, pyjson.loads(text))
+    lua.execute("json.decode = PYDECODE")
+    lua.eval('load')(current('resource/sv_main.lua'), 'main')()
+    return lua
+
+def tx_event(lua, name, data):
+    args = lua.table(); args[1] = name; args[2] = pyjson.dumps(data)
+    lua.eval('COMMANDS.txaEvent')(0, args)
+
+print('[sv_main.lua | txaEvent dispatch]')
+lua = main_env()
+check('the txaEvent command is registered', lua.eval('type(COMMANDS.txaEvent)') == 'function')
+tx_event(lua, 'healedPlayer', {'a': 1})
+check('a normal event is broadcast to the other resources', list(lua.eval('BROADCAST').values()) == ['txAdmin:events:healedPlayer'], list(lua.eval('BROADCAST').values()))
+lua = main_env()
+lua.execute("TX_EVENT_HANDLERS.screenStreamStart = function(data) HANDLED[#HANDLED + 1] = data.sessionId end")
+tx_event(lua, 'screenStreamStart', {'sessionId': 's1', 'token': 'tok_abcdefghijklmnop-1234'})
+check('the live view start, which carries the upload token, is NOT broadcast to the other resources', 'txAdmin:events:screenStreamStart' not in list(lua.eval('BROADCAST').values()), list(lua.eval('BROADCAST').values()))
+check('but its own handler still runs', list(lua.eval('HANDLED').values()) == ['s1'])
+lua = main_env()
+lua.execute("TX_EVENT_HANDLERS.screenStreamStop = function(data) HANDLED[#HANDLED + 1] = data.sessionId end")
+tx_event(lua, 'screenStreamStop', {'sessionId': 's1'})
+check('the stop (no secret in it) is still broadcast like the others', 'txAdmin:events:screenStreamStop' in list(lua.eval('BROADCAST').values()) and list(lua.eval('HANDLED').values()) == ['s1'])
 
 # the server only wires the route when the file exists
 sv_main = current('resource/sv_main.lua')
