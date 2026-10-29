@@ -4,6 +4,7 @@ import consoleFactory from '@lib/console';
 import statusRoom from './wsRooms/status';
 import dashboardRoom from './wsRooms/dashboard';
 import playerlistRoom from './wsRooms/playerlist';
+import playermapRoom from './wsRooms/playermap';
 import liveconsoleRoom from './wsRooms/liveconsole';
 import serverlogRoom from './wsRooms/serverlog';
 import { AuthedAdminType, checkRequestAuth } from './authLogic';
@@ -29,7 +30,7 @@ export type RoomType = {
 }
 
 //NOTE: quen adding multiserver, create dynamic rooms like playerlist#<svname>
-const VALID_ROOMS = ['status', 'dashboard', 'liveconsole', 'serverlog', 'playerlist'] as const;
+const VALID_ROOMS = ['status', 'dashboard', 'liveconsole', 'serverlog', 'playerlist', 'playermap'] as const;
 type RoomNames = typeof VALID_ROOMS[number];
 
 
@@ -73,6 +74,7 @@ export default class WebSocket {
             status: statusRoom,
             dashboard: dashboardRoom,
             playerlist: playerlistRoom,
+            playermap: playermapRoom,
             liveconsole: liveconsoleRoom,
             serverlog: serverlogRoom,
         };
@@ -233,6 +235,14 @@ export default class WebSocket {
             console.error('SocketIO', `Error handling new connection: ${(error as Error).message}`);
             socket.disconnect();
         }
+    }
+
+
+    /**
+     * Number of sockets in a room, 0 if it is empty or unknown
+     */
+    getRoomSize(roomName: RoomNames) {
+        return this.#io.sockets.adapter.rooms.get(roomName)?.size ?? 0;
     }
 
 

@@ -135,6 +135,8 @@ const handleFd3Messages = (mutex: string, trace: StructuredTraceType) => {
             txCore.fxResources.handleServerEvents(data.payload, mutex);
         } else if (data.payload.type === 'txAdminPlayerlistEvent') {
             txCore.fxPlayerlist.handleServerEvents(data.payload, mutex);
+        } else if (data.payload.type === 'txAdminPlayerPositions') {
+            txCore.fxPlayerPositions.handleReport(data.payload);
         } else if (data.payload.type === 'txAdminCommandBridge') {
             handleBridgedCommands(data.payload);
         } else if (data.payload.type === 'txAdminAckWarning') {

@@ -171,6 +171,7 @@ TX_EVENT_HANDLERS = {
     -- Handled by another file
     adminsUpdated = false, -- sv_admins.lua
     configChanged = false, -- sv_ctx.lua
+    playerPositionsWanted = false, -- sv_playerlist.lua
 
     -- Known NO-OP
     actionRevoked = false,

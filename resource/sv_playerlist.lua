@@ -108,6 +108,34 @@ local function refreshPlayerList()
 end
 
 
+--[[ Live map of the web panel: positions are only reported while txAdmin asks for them ]]
+local positionsWantedUntil = 0
+local positionsMaxTtl = 60000
+
+TX_EVENT_HANDLERS.playerPositionsWanted = function(eventData)
+    local ttlMs = tonumber(eventData.ttlMs)
+    if ttlMs == nil or ttlMs <= 0 then return end
+    positionsWantedUntil = GetGameTimer() + min(ttlMs, positionsMaxTtl)
+end
+
+local function reportPositions()
+    if not onesyncEnabled or GetGameTimer() >= positionsWantedUntil then return end
+    local players = {}
+    local count = 0
+    for serverID, data in pairs(TX_PLAYERLIST) do
+        local netid = tonumber(serverID)
+        if netid ~= nil and data.xCoord ~= nil and data.yCoord ~= nil then
+            count = count + 1
+            players[count] = { netid, data.xCoord, data.yCoord, data.vType or -1 }
+        end
+    end
+    PrintStructuredTrace(json.encode({
+        type = 'txAdminPlayerPositions',
+        players = players,
+    }))
+end
+
+
 --[[ Thread to refresh player list ]]
 CreateThread(function()
     while true do
@@ -116,6 +144,9 @@ CreateThread(function()
         local playersOnline = 0
         if callSuccess then
             playersOnline = callOutput
+            if not pcall(reportPositions) then
+                logError("failed to report player positions")
+            end
         else
             logError("failed to update playerlist")
         end

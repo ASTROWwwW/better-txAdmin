@@ -14,6 +14,7 @@ import Translator from '@modules/Translator';
 import WebServer from '@modules/WebServer';
 import FxResources from '@modules/FxResources';
 import FxPlayerlist from '@modules/FxPlayerlist';
+import FxPlayerPositions from '@modules/FxPlayerPositions';
 import Database from '@modules/Database';
 import CacheStore from '@modules/CacheStore';
 import UpdateChecker from '@modules/UpdateChecker';
@@ -32,6 +33,7 @@ export type TxCoreType = {
     //FXServer
     fxMonitor: FxMonitor;
     fxPlayerlist: FxPlayerlist;
+    fxPlayerPositions: FxPlayerPositions;
     fxResources: FxResources;
     fxRunner: FxRunner;
     fxScheduler: FxScheduler;
@@ -104,6 +106,7 @@ export default function bootTxAdmin() {
     _txCore.metrics = startModule(Metrics);
     _txCore.fxResources = startModule(FxResources);
     _txCore.fxPlayerlist = startModule(FxPlayerlist);
+    _txCore.fxPlayerPositions = startModule(FxPlayerPositions);
     _txCore.cacheStore = startModule(CacheStore);
 
     //Very Low Priority
