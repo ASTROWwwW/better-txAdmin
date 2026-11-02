@@ -118,6 +118,54 @@ suite('indexed daos', () => {
         expect(actions.findOne(warnId).acked).toBe(true);
     });
 
+    it('a ban registered after a cleanup removed actions and before any lookup is not missed', () => {
+        for (const removed of [1, 2]) {
+            for (const kind of ['ban', 'warn']) {
+                const { actions, cleanup } = setup();
+                const oldIds = Array.from({ length: 4 }, (_, i) => `license:old${i}`);
+                oldIds.forEach((id) => actions.registerWarn([id], 'admin', 'reason', 'name'));
+                expect(actions.findMany(oldIds)).toHaveLength(4);
+
+                const doomed = new Set(oldIds.slice(0, removed));
+                cleanup.bulkRemove('actions', (a) => doomed.has(a.ids[0]));
+                const newIds = Array.from({ length: removed }, (_, i) => `license:new${i}`);
+                const registered = newIds.map((id) => kind === 'ban'
+                    ? actions.registerBan([id], 'admin', 'reason', false, 'name', [])
+                    : actions.registerWarn([id], 'admin', 'reason', 'name'));
+
+                newIds.forEach((id, i) => {
+                    expect(actions.findMany([id]).map((a) => a.id), `${kind} ${id} after ${removed} removed`).toEqual([registered[i]]);
+                });
+                oldIds.slice(0, removed).forEach((id) => expect(actions.findMany([id])).toEqual([]));
+            }
+        }
+    });
+
+    it('a player registered after a cleanup removed players and before any lookup is not missed', () => {
+        const { players, cleanup } = setup();
+        const licenses = Array.from({ length: 4 }, (_, i) => hex40(i + 1));
+        licenses.forEach((license, i) => players.register(newPlayer(license, i + 1)));
+        expect(players.findOne(licenses[3])).not.toBeNull();
+
+        cleanup.bulkRemove('players', (p) => p.license === licenses[0]);
+        const fresh = hex40(99);
+        players.register(newPlayer(fresh, 99));
+        expect(players.findOne(fresh)).toMatchObject({ license: fresh });
+        expect(players.findOne(licenses[0])).toBeNull();
+        expect(() => players.register(newPlayer(fresh, 100))).toThrow(DuplicateKeyError);
+    });
+
+    it('findMany returns copies, changing them does not change the database', () => {
+        const { data, actions } = setup();
+        actions.registerBan(['license:a'], 'admin', 'reason', false, 'name', ['hw']);
+        const [copy] = actions.findMany(['license:a']);
+        copy.reason = 'changed';
+        copy.ids.push('license:injected');
+        expect(data.actions[0].reason).toBe('reason');
+        expect(data.actions[0].ids).toEqual(['license:a']);
+        expect(actions.findMany(['license:injected'])).toEqual([]);
+    });
+
     it('answers exactly like the previous queries over thousands of random operations', () => {
         const random = mulberry32(20261102);
         const pick = (list) => list[Math.floor(random() * list.length)];
@@ -197,10 +245,14 @@ suite('indexed daos', () => {
             },
         ];
 
+        const appOperations = operations.slice(0, -2);
         let compared = 0;
         let nonEmpty = 0;
         for (let step = 0; step < 2500; step++) {
-            pick(operations)();
+            //Several writes before a lookup only with what the app does (daos, cleanup, a replaced array).
+            //The two last operations write into the arrays directly, nothing does that: alone they change the length.
+            const burst = random() < 0.35 ? 1 + Math.floor(random() * 3) : 1;
+            for (let b = 0; b < burst; b++) pick(burst > 1 ? appOperations : operations)();
 
             for (let q = 0; q < 6; q++) {
                 txConfig.banlist.requiredHwidMatches = pick([0, 1, 1, 2]);

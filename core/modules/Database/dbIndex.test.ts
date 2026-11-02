@@ -56,6 +56,29 @@ suite('PlayersIndex', () => {
         expect(index.find(players, 'd')).toBe(players[2]);
     });
 
+    it('finds a player pushed right after removals that brought the array back to its old length', () => {
+        const players = [player('a'), player('b')];
+        const index = new PlayersIndex();
+        index.find(players, 'a');
+        players.splice(0, 1);
+        const added = player('c');
+        index.push(players, added);
+        expect(players).toHaveLength(2);
+        expect(index.find(players, 'c')).toBe(added);
+        expect(index.find(players, 'a')).toBeUndefined();
+    });
+
+    it('notices the last player replaced behind its back without a change of length', () => {
+        const players = [player('a'), player('b')];
+        const index = new PlayersIndex();
+        index.find(players, 'a');
+        players.pop();
+        const added = player('c');
+        players.push(added);
+        expect(index.find(players, 'c')).toBe(added);
+        expect(index.find(players, 'b')).toBeUndefined();
+    });
+
     it('follows an array that was replaced', () => {
         const first = [player('a')];
         const second = [player('b')];
@@ -107,6 +130,28 @@ suite('ActionsIndex', () => {
         actions.splice(0, 1);
         actions.push(action('4', ['y']));
         expect(index.candidates(actions, ['x'], undefined).map((a: any) => a.id)).toEqual(['2', '3']);
+    });
+
+    it('finds an action pushed right after removals that brought the array back to its old length', () => {
+        const actions = [action('1', ['x']), action('2', ['y'])];
+        const index = new ActionsIndex();
+        index.candidates(actions, ['x'], undefined);
+        actions.splice(0, 1);
+        const added = action('3', ['z']);
+        index.push(actions, added);
+        expect(actions).toHaveLength(2);
+        expect(index.candidates(actions, ['z'], undefined)).toEqual([added]);
+        expect(index.candidates(actions, ['x'], undefined)).toEqual([]);
+    });
+
+    it('notices the last action replaced behind its back without a change of length', () => {
+        const actions = [action('1', ['x']), action('2', ['y'])];
+        const index = new ActionsIndex();
+        index.candidates(actions, ['x'], undefined);
+        actions.pop();
+        const added = action('3', ['z']);
+        actions.push(added);
+        expect(index.candidates(actions, ['z'], undefined)).toEqual([added]);
     });
 
     it('keeps an action whose hwids were wiped as a candidate, the caller filters it', () => {

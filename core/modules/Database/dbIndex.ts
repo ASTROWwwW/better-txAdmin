@@ -14,12 +14,15 @@ const addToBucket = <T>(map: Map<string, Entry<T>[]>, key: string, entry: Entry<
 
 /**
  * The lowdb arrays stay the source of truth. An index is only trusted while it was built from the
- * same array object with the same length, and every entry it returns is checked against the array
- * position it came from, so an array changed behind its back (removals, replaced array) is rebuilt.
+ * same array object with the same length and the same last element, and every entry it returns is
+ * checked against the array position it came from, so an array changed behind its back (removals,
+ * a replaced array) is rebuilt. A push that finds the index out of date drops it: the length can be
+ * back to the old one after removals followed by as many pushes.
  */
 export class PlayersIndex {
     #source: DatabasePlayerType[] | undefined;
     #length = -1;
+    #last: DatabasePlayerType | undefined;
     readonly #byLicense = new Map<string, Entry<DatabasePlayerType>>();
 
     #rebuild(source: DatabasePlayerType[]) {
@@ -29,11 +32,16 @@ export class PlayersIndex {
         });
         this.#source = source;
         this.#length = source.length;
+        this.#last = source[source.length - 1];
+    }
+
+    #isCurrent(source: DatabasePlayerType[]) {
+        return this.#source === source && this.#length === source.length && this.#last === source[source.length - 1];
     }
 
     /** Same result as lodash find({ license }): the first player of the array with that license */
     find(source: DatabasePlayerType[], license: string): DatabasePlayerType | undefined {
-        if (this.#source !== source || this.#length !== source.length) this.#rebuild(source);
+        if (!this.#isCurrent(source)) this.#rebuild(source);
         let entry = this.#byLicense.get(license);
         if (entry && source[entry.pos] !== entry.item) {
             this.#rebuild(source);
@@ -43,10 +51,14 @@ export class PlayersIndex {
     }
 
     push(source: DatabasePlayerType[], player: DatabasePlayerType) {
-        const inSync = this.#source === source && this.#length === source.length;
+        const inSync = this.#isCurrent(source);
         source.push(player);
-        if (!inSync) return;
+        if (!inSync) {
+            this.#source = undefined;
+            return;
+        }
         this.#length = source.length;
+        this.#last = player;
         if (!this.#byLicense.has(player.license)) {
             this.#byLicense.set(player.license, { item: player, pos: source.length - 1 });
         }
@@ -57,6 +69,7 @@ export class PlayersIndex {
 export class ActionsIndex {
     #source: DatabaseActionType[] | undefined;
     #length = -1;
+    #last: DatabaseActionType | undefined;
     readonly #byIdentifier = new Map<string, Entry<DatabaseActionType>[]>();
     readonly #byHwid = new Map<string, Entry<DatabaseActionType>[]>();
 
@@ -76,6 +89,11 @@ export class ActionsIndex {
         source.forEach((item, pos) => this.#addEntry(item, pos));
         this.#source = source;
         this.#length = source.length;
+        this.#last = source[source.length - 1];
+    }
+
+    #isCurrent(source: DatabaseActionType[]) {
+        return this.#source === source && this.#length === source.length && this.#last === source[source.length - 1];
     }
 
     /**
@@ -84,7 +102,7 @@ export class ActionsIndex {
      */
     candidates(source: DatabaseActionType[], ids: string[], hwids?: string[]): DatabaseActionType[] {
         for (let attempt = 0; attempt < 2; attempt++) {
-            if (this.#source !== source || this.#length !== source.length) this.#rebuild(source);
+            if (!this.#isCurrent(source)) this.#rebuild(source);
             const found = new Map<number, DatabaseActionType>();
             let stale = false;
             const collect = (map: Map<string, Entry<DatabaseActionType>[]>, keys: string[]) => {
@@ -106,10 +124,14 @@ export class ActionsIndex {
     }
 
     push(source: DatabaseActionType[], action: DatabaseActionType) {
-        const inSync = this.#source === source && this.#length === source.length;
+        const inSync = this.#isCurrent(source);
         source.push(action);
-        if (!inSync) return;
+        if (!inSync) {
+            this.#source = undefined;
+            return;
+        }
         this.#length = source.length;
+        this.#last = action;
         this.#addEntry(action, source.length - 1);
     }
 }
