@@ -22,3 +22,10 @@ function PlayerHasTxPermission(source, reqPerm)
       source, reqPerm, (allow and '^2true' or '^1false')))
   return allow
 end
+
+--- Determine if an id sent by a client is the server id of a connected player (-1 is not one)
+---@param id any
+---@return boolean
+function IsValidPlayerId(id)
+  return type(id) == 'number' and id > 0 and id % 1 == 0 and type(GetPlayerName(id)) == 'string'
+end

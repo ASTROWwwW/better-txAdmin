@@ -16,11 +16,11 @@ local function handleSpectatePlayer(targetId)
   local allow = PlayerHasTxPermission(src, 'players.spectate')
 
   if allow then
-    local targetPed = GetPlayerPed(targetId)
     -- Lets exit if the target doesn't exist
-    if not targetPed then
+    if not IsValidPlayerId(targetId) then
       return
     end
+    local targetPed = GetPlayerPed(targetId)
     -- checking if spectator and target are on the same routing bucket
     local targetBucket = GetPlayerRoutingBucket(targetId)
     local srcBucket = GetPlayerRoutingBucket(src)
@@ -47,6 +47,9 @@ RegisterNetEvent('txsv:req:spectate:start', handleSpectatePlayer)
 --- @param isNextPlayer boolean If we should cycle to the next player or not.
 RegisterNetEvent('txsv:req:spectate:cycle', function(currentTargetId, isNextPlayer)
   local src = source
+  if not PlayerHasTxPermission(src, 'players.spectate') then
+    return
+  end
 
   local onlinePlayers = GetPlayers()
   -- We don't allow cycling if there are less than two players online.

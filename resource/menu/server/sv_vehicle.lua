@@ -39,14 +39,19 @@ RegisterNetEvent('txsv:req:vehicle:spawn:redm', function(model)
   end
 end)
 
+local VEHICLE_TYPES = {
+  automobile = true, bike = true, boat = true, heli = true,
+  plane = true, submarine = true, trailer = true, train = true,
+}
+
 --- Spawn a vehicle on the server at the request of a client (fivem)
 ---@param model string
 ---@param modelType string
 RegisterNetEvent('txsv:req:vehicle:spawn:fivem', function(model, modelType)
   if not IS_FIVEM then return end
   local src = source
-  if type(model) ~= 'string' then return end
-  if type(modelType) ~= 'string' then return end
+  if type(model) ~= 'string' or #model > 64 then return end
+  if not VEHICLE_TYPES[modelType] then return end
 
   --check permission
   local allow = PlayerHasTxPermission(src, 'menu.vehicle')
@@ -122,8 +127,10 @@ RegisterNetEvent('txsv:req:vehicle:delete', function(vehNetId)
   local src = source
   local allow = PlayerHasTxPermission(src, 'menu.vehicle')
   TriggerEvent('txsv:logger:menuEvent', src, 'deleteVehicle', allow)
-  if allow then
-    local vehicle = NetworkGetEntityFromNetworkId(vehNetId)
-    DeleteEntity(vehicle)
-  end
+  if not allow or type(vehNetId) ~= 'number' then return end
+
+  local vehicle = NetworkGetEntityFromNetworkId(vehNetId)
+  if vehicle == 0 then return end
+  if IS_FIVEM and vehicle ~= GetVehiclePedIsIn(GetPlayerPed(src), false) then return end
+  DeleteEntity(vehicle)
 end)

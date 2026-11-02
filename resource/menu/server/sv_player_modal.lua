@@ -20,7 +20,7 @@ RegisterNetEvent('txsv:req:tpToPlayer', function(tgtId)
   local data = { x = nil, y = nil, z = nil, target = tgtId }
 
   -- More OneSync dependent code
-  if allow then
+  if allow and IsValidPlayerId(tgtId) then
     -- Check for routing bucket diff
     local tgtBucket = GetPlayerRoutingBucket(tgtId)
     local srcBucket = GetPlayerRoutingBucket(src)

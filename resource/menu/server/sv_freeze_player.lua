@@ -17,11 +17,15 @@ RegisterNetEvent('txsv:req:freezePlayer', function(targetId)
   local src = source
   local allow = PlayerHasTxPermission(src, 'players.freeze')
   TriggerEvent('txsv:logger:menuEvent', src, 'freezePlayer', allow, targetId)
-  if allow then
+  if allow and IsValidPlayerId(targetId) then
     local newFrozenStatus = not isPlayerFrozen(targetId)
     setPlayerFrozenInMap(targetId, newFrozenStatus)
 
     TriggerClientEvent('txcl:freezePlayerOk', src, newFrozenStatus)
     TriggerClientEvent('txcl:setFrozen', targetId, newFrozenStatus)
   end
+end)
+
+AddEventHandler('playerDropped', function()
+  setPlayerFrozenInMap(tonumber(source), nil)
 end)
