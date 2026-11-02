@@ -47,7 +47,7 @@ end)
 
 RegisterNetEvent('txsv:req:bringPlayer', function(id)
   local src = source
-  if type(id) ~= 'number' then
+  if not IsValidPlayerId(id) then
     return
   end
   local allow = PlayerHasTxPermission(src, 'players.teleport')

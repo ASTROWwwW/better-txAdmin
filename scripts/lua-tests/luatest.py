@@ -852,5 +852,30 @@ lua = menu_env('sv_main_page.lua', use_old=True)
 fire(lua, 'txsv:req:healPlayer', 5, -1)
 check('base heals everybody through healPlayer with -1 (the bug is real)', sent(lua, 'txcl:heal') == [-1], sent(lua, 'txcl:heal'))
 
+print('[sv_functions.lua | IsValidPlayerId with a GetPlayerName that answers a string for anything]')
+lua = env()
+lua.execute("function GetPlayerName() return 'anyone' end")
+is_valid = lua.eval('IsValidPlayerId')
+check('only a positive integer number passes, whatever GetPlayerName says',
+      [is_valid(v) for v in (-1, 0, 6.5, '6', True, None)] == [False] * 6 and is_valid(6) is True and is_valid(lua.eval(NAN)) is False)
+lua.execute("function GetPlayerName() return nil end")
+check('a number that is not a connected player fails', is_valid(6) is False)
+
+print('[sv_vehicle.lua | delete on RedM]')
+lua = menu_env('sv_vehicle.lua')
+lua.execute('IS_FIVEM = false; IS_REDM = true; PED_VEH = 500')
+fire(lua, 'txsv:req:vehicle:delete', 5, 88)
+fire(lua, 'txsv:req:vehicle:delete', 5, 0)
+check('RedM keeps its behavior (the entity named by the admin) and never deletes entity 0', list(lua.eval('DELETED').values()) == [600], list(lua.eval('DELETED').values()))
+
+print('[sv_player_modal.lua | bringPlayer]')
+lua = menu_env('sv_player_modal.lua')
+lua.execute("function GetPlayerPed(id) return 100 + (type(id) == 'number' and id or 0) end")
+for bad in (-1, 99, 6.5, '6'):
+    fire(lua, 'txsv:req:bringPlayer', 5, bad)
+check('bringing an id that is not a connected player reaches nobody, even if GetPlayerPed answers', sent(lua, 'txcl:tpToCoords') == [], sent(lua, 'txcl:tpToCoords'))
+fire(lua, 'txsv:req:bringPlayer', 5, 6)
+check('bringing a connected player still works', sent(lua, 'txcl:tpToCoords') == [6], sent(lua, 'txcl:tpToCoords'))
+
 print(f'\n{PASS} checks passed, {FAIL} failed')
 sys.exit(1 if FAIL else 0)
