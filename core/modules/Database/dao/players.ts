@@ -1,7 +1,8 @@
-import { cloneDeep } from 'lodash-es';
+import { assign, cloneDeep } from 'lodash-es';
 import { DbInstance, SavePriority } from "../instance";
 import { DatabasePlayerType } from "../databaseTypes";
 import { DuplicateKeyError } from "../dbUtils";
+import { PlayersIndex } from "../dbIndex";
 import consoleFactory from '@lib/console';
 const console = consoleFactory('DatabaseDao');
 
@@ -10,6 +11,8 @@ const console = consoleFactory('DatabaseDao');
  * Data access object for the database "players" collection.
  */
 export default class PlayersDao {
+    private readonly index = new PlayersIndex();
+
     constructor(private readonly db: DbInstance) { }
 
     private get dbo() {
@@ -32,11 +35,8 @@ export default class PlayersDao {
         }
 
         //Performing search
-        const p = this.chain.get('players')
-            .find({ license })
-            .cloneDeep()
-            .value();
-        return (typeof p === 'undefined') ? null : p;
+        const p = this.index.find(this.dbo.data.players, license);
+        return (typeof p === 'undefined') ? null : cloneDeep(p);
     }
 
 
@@ -58,15 +58,11 @@ export default class PlayersDao {
         //TODO: validate player data vs DatabasePlayerType props
 
         //Check for duplicated license
-        const found = this.chain.get('players')
-            .filter({ license: player.license })
-            .value();
-        if (found.length) throw new DuplicateKeyError(`this license is already registered`);
+        const players = this.dbo.data.players;
+        if (this.index.find(players, player.license)) throw new DuplicateKeyError(`this license is already registered`);
 
         this.db.writeFlag(SavePriority.LOW);
-        this.chain.get('players')
-            .push(player)
-            .value();
+        this.index.push(players, player);
     }
 
 
@@ -79,13 +75,10 @@ export default class PlayersDao {
             throw new Error(`cannot license field`);
         }
 
-        const playerDbObj = this.chain.get('players').find({ license });
-        if (!playerDbObj.value()) throw new Error('Player not found in database');
+        const playerDbObj = this.index.find(this.dbo.data.players, license);
+        if (!playerDbObj) throw new Error('Player not found in database');
         this.db.writeFlag(SavePriority.LOW);
-        const newData = playerDbObj
-            .assign(cloneDeep(srcData))
-            .cloneDeep()
-            .value();
+        const newData = cloneDeep(assign(playerDbObj, cloneDeep(srcData)));
         txCore.fxPlayerlist.handleDbDataSync(newData, srcUniqueId);
         return newData;
     }

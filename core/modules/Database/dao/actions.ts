@@ -1,7 +1,8 @@
-import { cloneDeep } from 'lodash-es';
+import { cloneDeep, filter } from 'lodash-es';
 import { DbInstance, SavePriority } from "../instance";
 import { DatabaseActionBanType, DatabaseActionType, DatabaseActionWarnType } from "../databaseTypes";
 import { genActionID } from "../dbUtils";
+import { ActionsIndex } from "../dbIndex";
 import { now } from '@lib/misc';
 import consoleFactory from '@lib/console';
 const console = consoleFactory('DatabaseDao');
@@ -11,6 +12,8 @@ const console = consoleFactory('DatabaseDao');
  * Data access object for the database "actions" collection.
  */
 export default class ActionsDao {
+    private readonly index = new ActionsIndex();
+
     constructor(private readonly db: DbInstance) { }
 
     private get dbo() {
@@ -62,15 +65,15 @@ export default class ActionsDao {
 
         try {
             //small optimization
-            const idsMatchFilter = hwidsArray && hwidsArray.length && txConfig.banlist.requiredHwidMatches
+            const useHwids = !!(hwidsArray && hwidsArray.length && txConfig.banlist.requiredHwidMatches);
+            const idsMatchFilter = useHwids
                 ? (a: DatabaseActionType) => idsFilter(a) || hwidsFilter(a)
                 : (a: DatabaseActionType) => idsFilter(a)
 
-            return this.chain.get('actions')
-                .filter(customFilter as (a: DatabaseActionType) => a is T)
-                .filter(idsMatchFilter)
-                .cloneDeep()
-                .value()
+            //Only the actions that share an identifier or a hwid can match, the filters above still decide
+            const candidates = this.index.candidates(this.dbo.data.actions, idsArray, useHwids ? hwidsArray : undefined);
+            const matching = filter(filter(candidates, customFilter as (a: DatabaseActionType) => a is T), idsMatchFilter);
+            return cloneDeep(matching)
                 .sort((a, b) => a.timestamp - b.timestamp); //FIXME: shouldn't be needed, remove after the autosort migration
         } catch (error) {
             const msg = `Failed to search for a registered action database with error: ${(error as Error).message}`;
@@ -118,9 +121,7 @@ export default class ActionsDao {
                     author: null,
                 },
             };
-            this.chain.get('actions')
-                .push(toDB)
-                .value();
+            this.index.push(this.dbo.data.actions, toDB);
             this.db.writeFlag(SavePriority.HIGH);
             return actionID;
         } catch (error) {
@@ -166,9 +167,7 @@ export default class ActionsDao {
                     author: null,
                 },
             };
-            this.chain.get('actions')
-                .push(toDB)
-                .value();
+            this.index.push(this.dbo.data.actions, toDB);
             this.db.writeFlag(SavePriority.HIGH);
             return actionID;
         } catch (error) {
