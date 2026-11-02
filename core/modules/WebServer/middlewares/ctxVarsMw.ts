@@ -7,6 +7,7 @@ import { CtxWithSession } from '../ctxTypes';
 import { isIpAddressLocal } from '@lib/host/isIpAddressLocal';
 import { parseIdentifiersHeader } from '@lib/player/idUtils';
 import { resolveProxyRealIp } from '@lib/host/resolveProxyRealIp';
+import { safeEqual } from '@lib/safeEqual';
 
 //The custom tx-related vars set to the ctx
 export type CtxTxVars = {
@@ -46,8 +47,7 @@ const ctxVarsMw = (ctx: CtxWithSession, next: Next) => {
     //Setting up the user's real ip from the webpipe
     //NOTE: not used anywhere except rate limiter, and login logs.
     if (
-        typeof ctx.headers['x-txadmin-token'] === 'string'
-        && ctx.headers['x-txadmin-token'] === txCore.webServer.luaComToken
+        safeEqual(ctx.headers['x-txadmin-token'], txCore.webServer.luaComToken)
         && txVars.isLocalRequest
     ) {
         const ipIdentifier = parseIdentifiersHeader(ctx.headers['x-txadmin-identifiers'])

@@ -87,6 +87,7 @@ end
 def env(*sources):
     lua = LuaRuntime(unpack_returned_tuples=True, register_eval=False)
     lua.execute(PRELUDE)
+    lua.eval('load')(current('resource/menu/server/sv_functions.lua'), 'sv_functions')()
     for name, text in sources:
         lua.execute(text) if False else lua.eval('load')(text, name)()
     return lua
@@ -690,6 +691,191 @@ sv_main = current('resource/sv_main.lua')
 check('sv_main.lua sends /stream/ requests to the stream handler before anything else', "req.path:sub(1, 8) == '/stream/'" in sv_main and 'TX_STREAM_HTTP' in sv_main)
 check('sv_main.lua lists both stream events in the whitelist', 'screenStreamStart = false' in sv_main and 'screenStreamStop = false' in sv_main)
 check('the manifest loads sv_stream.lua and cl_stream.lua', "'resource/sv_stream.lua'" in current('fxmanifest.lua') and "'resource/cl_stream.lua'" in current('fxmanifest.lua'))
+
+# ---------------------------------------------------------------- menu handlers: arguments sent by a client
+MENU = 'resource/menu/server/'
+
+def menu_env(file, use_old=False):
+    lua = env((file, (old if use_old else current)(MENU + file)))
+    lua.execute("""
+      function GetPlayerName(id) if id == 5 or id == 6 or id == 7 then return 'player' .. id end return nil end
+      function Player(id) return { state = {} } end
+      function GetPlayers() return { '5', '6', '7' } end
+      function tableIndexOf(t, v) for i, x in ipairs(t) do if x == v then return i end end return -1 end
+      function GetPlayerRoutingBucket(id) if id == 7 or id == 99 then return 3 end return 0 end
+      function SetPlayerRoutingBucket(id, bucket) BUCKETS[#BUCKETS + 1] = table.pack(id, bucket) end
+      BUCKETS, DELETED, CREATED, PED_VEH = {}, {}, {}, 0
+      function DeleteEntity(e) DELETED[#DELETED + 1] = e end
+      function NetworkGetEntityFromNetworkId(n) if n == 77 then return 500 elseif n == 88 then return 600 end return 0 end
+      function GetVehiclePedIsIn(ped) return PED_VEH end
+      function GetEntityHeading() return 0.0 end
+      function CreateVehicleServerSetter(model, kind) CREATED[#CREATED + 1] = table.pack(model, kind) return 900 end
+      function DoesEntityExist() return true end
+      function SetEntityRoutingBucket() end
+      function SetEntityVelocity() end
+      function NetworkGetNetworkIdFromEntity() return 1 end
+      function call_co(name, src, ...)
+        source = src
+        local ok, err = coroutine.resume(coroutine.create(HANDLERS[name]), ...)
+        if not ok then error(err) end
+      end
+    """)
+    return lua
+
+def sent(lua, name):
+    return [e[2] for e in lua.eval('EVENTS').values() if e[1] == name]
+
+def spectated(lua):
+    return [e[3] for e in lua.eval('EVENTS').values() if e[1] == 'txcl:spectate:start']
+
+def fire(lua, name, src, *args):
+    lua.eval('call_event')(name, src, *args)
+
+NAN = '(0/0)'
+
+for ev, client in (('setDrunk', 'txcl:setDrunk'), ('setOnFire', 'txcl:setOnFire'), ('wildAttack', 'txcl:wildAttack')):
+    print(f'[sv_trollactions.lua | {ev}]')
+    lua = menu_env('sv_trollactions.lua')
+    name = f'txsv:req:troll:{ev}'
+    for bad in (-1, 99, 0, 6.5, '6'):
+        fire(lua, name, 5, bad)
+    fire(lua, name, 5, lua.eval(NAN))
+    check('an id that is not a connected player reaches nobody (-1, unknown, 0, fractional, string, NaN)', sent(lua, client) == [], sent(lua, client))
+    fire(lua, name, 9, 6)
+    check('a player without the permission reaches nobody', sent(lua, client) == [])
+    fire(lua, name, 5, 6)
+    check('a connected target is reached', sent(lua, client) == [6], sent(lua, client))
+    lua = menu_env('sv_trollactions.lua', use_old=True)
+    fire(lua, name, 5, -1)
+    check('base sends it to everybody with -1 (the bug is real)', sent(lua, client) == [-1], sent(lua, client))
+
+print('[sv_freeze_player.lua]')
+lua = menu_env('sv_freeze_player.lua')
+for bad in (-1, 99, '6', 6.5):
+    fire(lua, 'txsv:req:freezePlayer', 5, bad)
+check('an id that is not a connected player freezes nobody', sent(lua, 'txcl:setFrozen') == [] and sent(lua, 'txcl:freezePlayerOk') == [])
+fire(lua, 'txsv:req:freezePlayer', 5, 6)
+fire(lua, 'txsv:req:freezePlayer', 5, 6)
+states = [e[3] for e in lua.eval('EVENTS').values() if e[1] == 'txcl:setFrozen']
+check('freezing a connected player toggles it', states == [True, False], states)
+fire(lua, 'txsv:req:freezePlayer', 5, 6)
+lua.execute('source = 6; LOCAL_HANDLERS.playerDropped()')
+fire(lua, 'txsv:req:freezePlayer', 5, 6)
+states = [e[3] for e in lua.eval('EVENTS').values() if e[1] == 'txcl:setFrozen']
+check('the frozen state of a player who left is not inherited by the next one using that id', states[-2:] == [True, True], states)
+lua = menu_env('sv_freeze_player.lua', use_old=True)
+fire(lua, 'txsv:req:freezePlayer', 5, -1)
+check('base freezes everybody with -1 (the bug is real)', sent(lua, 'txcl:setFrozen') == [-1], sent(lua, 'txcl:setFrozen'))
+
+print('[sv_vehicle.lua | delete]')
+lua = menu_env('sv_vehicle.lua')
+lua.execute('PED_VEH = 500')
+fire(lua, 'txsv:req:vehicle:delete', 5, 88)
+fire(lua, 'txsv:req:vehicle:delete', 5, 0)
+fire(lua, 'txsv:req:vehicle:delete', 5, 'x')
+fire(lua, 'txsv:req:vehicle:delete', 9, 77)
+check('only the vehicle the admin is in can be deleted (another entity, unknown id, string, no permission)', list(lua.eval('DELETED').values()) == [], list(lua.eval('DELETED').values()))
+fire(lua, 'txsv:req:vehicle:delete', 5, 77)
+check('the vehicle the admin is in is deleted', list(lua.eval('DELETED').values()) == [500], list(lua.eval('DELETED').values()))
+lua = menu_env('sv_vehicle.lua', use_old=True)
+lua.execute('PED_VEH = 500')
+fire(lua, 'txsv:req:vehicle:delete', 5, 88)
+check('base deletes any entity the admin names (the bug is real)', list(lua.eval('DELETED').values()) == [600], list(lua.eval('DELETED').values()))
+
+print('[sv_vehicle.lua | spawn:fivem]')
+lua = menu_env('sv_vehicle.lua')
+fire(lua, 'txsv:req:vehicle:spawn:fivem', 5, 'adder', 'evil')
+fire(lua, 'txsv:req:vehicle:spawn:fivem', 5, 'adder', None)
+fire(lua, 'txsv:req:vehicle:spawn:fivem', 5, 'a' * 65, 'automobile')
+check('a type outside the list or a model of 65 characters spawns nothing', len(lua.eval('CREATED')) == 0)
+lua.eval('call_co')('txsv:req:vehicle:spawn:fivem', 5, 'adder', 'automobile')
+created = [(c[1], c[2]) for c in lua.eval('CREATED').values()]
+check('a valid model and type still spawns', created == [('adder', 'automobile')], created)
+
+print('[sv_player_mode.lua]')
+lua = menu_env('sv_player_mode.lua')
+fire(lua, 'txsv:req:changePlayerMode', 5, 'godmode', lua.eval('{-1, -1, 6, 6, 99, "x", 5}'))
+check('the effect goes once to each connected player of the list, and the list cannot broadcast', sent(lua, 'txcl:showPtfx') == [6, 5], sent(lua, 'txcl:showPtfx'))
+check('the admin still gets the mode', sent(lua, 'txcl:setPlayerMode') == [5])
+fire(lua, 'txsv:req:changePlayerMode', 5, 'godmode')
+check('a missing list does not raise and still sets the mode', sent(lua, 'txcl:setPlayerMode') == [5, 5])
+lua = menu_env('sv_player_mode.lua')
+lua.execute("function GetPlayerName(id) if type(id) == 'number' and id >= 1 and id <= 300 then return 'p' end end")
+fire(lua, 'txsv:req:changePlayerMode', 5, 'noclip', lua.eval('(function() local t = {} for i = 1, 300 do t[i] = i end return t end)()'))
+check('at most 128 players of the list are reached', len(sent(lua, 'txcl:showPtfx')) == 128, len(sent(lua, 'txcl:showPtfx')))
+lua = menu_env('sv_player_mode.lua', use_old=True)
+fire(lua, 'txsv:req:changePlayerMode', 5, 'godmode', lua.eval('{-1, -1}'))
+check('base relays the list as it comes, -1 included (the bug is real)', sent(lua, 'txcl:showPtfx') == [-1, -1], sent(lua, 'txcl:showPtfx'))
+
+print('[sv_spectate.lua]')
+lua = menu_env('sv_spectate.lua')
+fire(lua, 'txsv:req:spectate:start', 5, 99)
+fire(lua, 'txsv:req:spectate:start', 5, -1)
+check('spectating a player who is not connected does nothing', spectated(lua) == [])
+fire(lua, 'txsv:req:spectate:start', 5, 6)
+check('spectating a connected player starts', spectated(lua) == [6], spectated(lua))
+lua = menu_env('sv_spectate.lua')
+fire(lua, 'txsv:req:spectate:cycle', 9, 6, True)
+check('cycling without the permission does nothing, not even the work of the cycle', len(lua.eval('EVENTS')) == 0 and len(lua.eval('MENU_EVENTS')) == 0)
+fire(lua, 'txsv:req:spectate:cycle', 5, 6, True)
+check('the admin can still cycle to the next player', spectated(lua) == [7], spectated(lua))
+lua = menu_env('sv_spectate.lua', use_old=True)
+fire(lua, 'txsv:req:spectate:start', 5, 99)
+check('base starts to spectate a player who is not connected (the bug is real)', spectated(lua) == [99], spectated(lua))
+
+print('[sv_player_modal.lua | tpToPlayer]')
+lua = menu_env('sv_player_modal.lua')
+fire(lua, 'txsv:req:tpToPlayer', 5, 99)
+fire(lua, 'txsv:req:tpToPlayer', 5, -1)
+check('teleporting to a player who is not connected does not change the routing bucket', len(lua.eval('BUCKETS')) == 0)
+fire(lua, 'txsv:req:tpToPlayer', 5, 7)
+check('teleporting to a connected player in another bucket still follows it', len(lua.eval('BUCKETS')) == 1)
+lua = menu_env('sv_player_modal.lua', use_old=True)
+fire(lua, 'txsv:req:tpToPlayer', 5, 99)
+check('base changes the routing bucket before knowing the target exists (the bug is real)', len(lua.eval('BUCKETS')) == 1)
+
+print('[sv_main_page.lua | healPlayer, clearArea]')
+lua = menu_env('sv_main_page.lua')
+fire(lua, 'txsv:req:healPlayer', 5, -1)
+fire(lua, 'txsv:req:healPlayer', 5, 99)
+check('healing an id that is not a connected player reaches nobody', sent(lua, 'txcl:heal') == [])
+fire(lua, 'txsv:req:healPlayer', 5, '6')
+check('a connected target given as a string is still healed', sent(lua, 'txcl:heal') == [6], sent(lua, 'txcl:heal'))
+for bad in (-1, 301, 99999, 'x'):
+    fire(lua, 'txsv:req:clearArea', 5, bad)
+fire(lua, 'txsv:req:clearArea', 5, lua.eval(NAN))
+check('a radius outside 0 to 300 or not a number clears nothing', sent(lua, 'txcl:clearArea') == [])
+fire(lua, 'txsv:req:clearArea', 5, 150)
+fire(lua, 'txsv:req:clearArea', 5, 300)
+check('a radius of the menu is still cleared', len(sent(lua, 'txcl:clearArea')) == 2)
+lua = menu_env('sv_main_page.lua', use_old=True)
+fire(lua, 'txsv:req:healPlayer', 5, -1)
+check('base heals everybody through healPlayer with -1 (the bug is real)', sent(lua, 'txcl:heal') == [-1], sent(lua, 'txcl:heal'))
+
+print('[sv_functions.lua | IsValidPlayerId with a GetPlayerName that answers a string for anything]')
+lua = env()
+lua.execute("function GetPlayerName() return 'anyone' end")
+is_valid = lua.eval('IsValidPlayerId')
+check('only a positive integer number passes, whatever GetPlayerName says',
+      [is_valid(v) for v in (-1, 0, 6.5, '6', True, None)] == [False] * 6 and is_valid(6) is True and is_valid(lua.eval(NAN)) is False)
+lua.execute("function GetPlayerName() return nil end")
+check('a number that is not a connected player fails', is_valid(6) is False)
+
+print('[sv_vehicle.lua | delete on RedM]')
+lua = menu_env('sv_vehicle.lua')
+lua.execute('IS_FIVEM = false; IS_REDM = true; PED_VEH = 500')
+fire(lua, 'txsv:req:vehicle:delete', 5, 88)
+fire(lua, 'txsv:req:vehicle:delete', 5, 0)
+check('RedM keeps its behavior (the entity named by the admin) and never deletes entity 0', list(lua.eval('DELETED').values()) == [600], list(lua.eval('DELETED').values()))
+
+print('[sv_player_modal.lua | bringPlayer]')
+lua = menu_env('sv_player_modal.lua')
+lua.execute("function GetPlayerPed(id) return 100 + (type(id) == 'number' and id or 0) end")
+for bad in (-1, 99, 6.5, '6'):
+    fire(lua, 'txsv:req:bringPlayer', 5, bad)
+check('bringing an id that is not a connected player reaches nobody, even if GetPlayerPed answers', sent(lua, 'txcl:tpToCoords') == [], sent(lua, 'txcl:tpToCoords'))
+fire(lua, 'txsv:req:bringPlayer', 5, 6)
+check('bringing a connected player still works', sent(lua, 'txcl:tpToCoords') == [6], sent(lua, 'txcl:tpToCoords'))
 
 print(f'\n{PASS} checks passed, {FAIL} failed')
 sys.exit(1 if FAIL else 0)

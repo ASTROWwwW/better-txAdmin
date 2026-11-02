@@ -41,6 +41,9 @@ end)
 
 RegisterNetEvent('txsv:req:clearArea', function(radius)
   local src = source
+  if type(radius) ~= 'number' or not (radius >= 0 and radius <= 300) then
+    return
+  end
   local allow = PlayerHasTxPermission(src, 'menu.clear_area')
   TriggerEvent('txsv:logger:menuEvent', src, 'clearArea', allow, radius)
   if allow then
@@ -88,8 +91,7 @@ RegisterNetEvent('txsv:req:healPlayer', function(id)
   id = tonumber(id)
   local allow = PlayerHasTxPermission(src, 'players.heal')
   if allow then
-    local ped = GetPlayerPed(id)
-    if ped then
+    if IsValidPlayerId(id) then
       TriggerClientEvent('txcl:heal', id)
       -- For use with third party resources that handle players
       -- 'revive state' standalone from health (esx-ambulancejob, qb-ambulancejob, etc)

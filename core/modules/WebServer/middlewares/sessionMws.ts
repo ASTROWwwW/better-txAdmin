@@ -139,21 +139,32 @@ export const koaSessMw = (cookieName: string, store: SessionMemoryStorage) => {
             return stored;
         }
 
+        let issuedSessId: string | undefined;
+
         const sessSet = (sess: ValidSessionType) => {
             const sessId = ctx.cookies.get(cookieName);
-            if (!sessId || !isValidSessId(sessId)) {
-                const newSessId = randomUUID();
-                ctx.cookies.set(cookieName, newSessId, cookieOptions);
-                store.set(newSessId, sess);
-            } else {
+            const stored = sessId && isValidSessId(sessId) ? store.get(sessId) : undefined;
+            //A cookie that can be planted in the browser of the admin must not become his login:
+            //an id the store does not know is never kept, and a login gets a new id unless it is the same admin.
+            const keepsLogin = !sess.auth || stored?.auth?.username === sess.auth.username;
+            if (sessId && stored && keepsLogin) {
                 store.set(sessId, sess);
+                return;
             }
+            if (sessId && stored) store.destroy(sessId);
+            const newSessId = randomUUID();
+            ctx.cookies.set(cookieName, newSessId, cookieOptions);
+            ctx._refreshSessionCookieId = newSessId;
+            issuedSessId = newSessId;
+            store.set(newSessId, sess);
         }
 
         const sessDestroy = () => {
-            const sessId = ctx.cookies.get(cookieName);
-            if (!sessId || !isValidSessId(sessId)) return;
-            store.destroy(sessId);
+            //The id issued during this request is not in the request cookie, but it must go too
+            const ids = [ctx.cookies.get(cookieName), issuedSessId]
+                .filter((id): id is string => !!id && isValidSessId(id));
+            if (!ids.length) return;
+            ids.forEach((id) => store.destroy(id));
             ctx.cookies.set(cookieName, 'unset', cookieOptions);
         }
 

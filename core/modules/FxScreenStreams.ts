@@ -1,8 +1,9 @@
 const modulename = 'FxScreenStreams';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import type { ServerResponse } from 'node:http';
 import consoleFactory from '@lib/console';
 import { getImageSize, isSafeImage } from '@lib/imageSize';
+import { safeEqual } from '@lib/safeEqual';
 const console = consoleFactory(modulename);
 
 
@@ -73,12 +74,6 @@ type Session = {
 const clampSetting = (value: unknown, range: { min: number; max: number; default: number }) => {
     if (typeof value !== 'number' || !Number.isFinite(value)) return range.default;
     return Math.min(range.max, Math.max(range.min, value));
-};
-
-const safeEqual = (a: string, b: string) => {
-    const bufA = Buffer.from(a);
-    const bufB = Buffer.from(b);
-    return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
 };
 
 const isJpeg = (data: Buffer) => (

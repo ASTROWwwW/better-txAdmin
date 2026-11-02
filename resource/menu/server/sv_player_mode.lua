@@ -4,6 +4,7 @@ if not TX_SERVER_MODE then return end
 if not TX_MENU_ENABLED then return end
 
 local IS_PTFX_ENABLED = GetConvarBool('txAdmin-playerModePtfx', true)
+local MAX_PTFX_TARGETS = 128
 
 RegisterNetEvent('txsv:req:changePlayerMode', function(mode, nearbyPlayers)
   local src = source
@@ -17,9 +18,14 @@ RegisterNetEvent('txsv:req:changePlayerMode', function(mode, nearbyPlayers)
   if allow then
     TriggerClientEvent('txcl:setPlayerMode', src, mode, IS_PTFX_ENABLED)
 
-    if IS_PTFX_ENABLED then
-      for _, v in ipairs(nearbyPlayers) do
-        TriggerClientEvent('txcl:showPtfx', v, src)
+    if IS_PTFX_ENABLED and type(nearbyPlayers) == 'table' then
+      local notified = {}
+      for i = 1, math.min(#nearbyPlayers, MAX_PTFX_TARGETS) do
+        local v = nearbyPlayers[i]
+        if IsValidPlayerId(v) and not notified[v] then
+          notified[v] = true
+          TriggerClientEvent('txcl:showPtfx', v, src)
+        end
       end
     end
   end
