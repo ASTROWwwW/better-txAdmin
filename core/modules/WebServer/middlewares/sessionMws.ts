@@ -139,6 +139,8 @@ export const koaSessMw = (cookieName: string, store: SessionMemoryStorage) => {
             return stored;
         }
 
+        let issuedSessId: string | undefined;
+
         const sessSet = (sess: ValidSessionType) => {
             const sessId = ctx.cookies.get(cookieName);
             const stored = sessId && isValidSessId(sessId) ? store.get(sessId) : undefined;
@@ -153,13 +155,16 @@ export const koaSessMw = (cookieName: string, store: SessionMemoryStorage) => {
             const newSessId = randomUUID();
             ctx.cookies.set(cookieName, newSessId, cookieOptions);
             ctx._refreshSessionCookieId = newSessId;
+            issuedSessId = newSessId;
             store.set(newSessId, sess);
         }
 
         const sessDestroy = () => {
-            const sessId = ctx.cookies.get(cookieName);
-            if (!sessId || !isValidSessId(sessId)) return;
-            store.destroy(sessId);
+            //The id issued during this request is not in the request cookie, but it must go too
+            const ids = [ctx.cookies.get(cookieName), issuedSessId]
+                .filter((id): id is string => !!id && isValidSessId(id));
+            if (!ids.length) return;
+            ids.forEach((id) => store.destroy(id));
             ctx.cookies.set(cookieName, 'unset', cookieOptions);
         }
 

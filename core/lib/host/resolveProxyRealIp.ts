@@ -95,8 +95,10 @@ export const resolveProxyRealIp = (socketIp: string, xffHeader: string | undefin
  * get a fresh bucket by changing the lower half of its address.
  */
 export const limiterKey = (ip: string) => {
-    if (isIP(ip) !== 6 || !/^[0-9a-f:]+$/i.test(ip)) return ip;
-    const [head, tail] = ip.split('::');
+    if (isIP(ip) !== 6) return ip;
+    const canonical = canonicalizeIpv6(ip);
+    if (canonical === undefined || isIP(canonical) !== 6) return canonical ?? ip;
+    const [head, tail] = canonical.split('::');
     const headGroups = head ? head.split(':') : [];
     const tailGroups = tail ? tail.split(':') : [];
     const groups = tail === undefined

@@ -82,8 +82,13 @@ suite('koaSessMw session id on login', () => {
         const store = new SessionMemoryStorage();
         const app = new Koa();
         app.use(koaSessMw(COOKIE, store) as any);
-        app.use((ctx: any) => {
+        app.use(async (ctx: any) => {
+            await Promise.resolve();
             if (ctx.path === '/anon') ctx.sessTools.set({ tmpOauthLoginStateKern: 'state' });
+            if (ctx.path === '/login-then-fail') {
+                ctx.sessTools.set({ auth: AUTH });
+                ctx.sessTools.destroy();
+            }
             if (ctx.path === '/login') ctx.sessTools.set({ auth: AUTH });
             if (ctx.path === '/login-other') ctx.sessTools.set({ auth: { ...AUTH, username: 'other' } });
             ctx.body = 'ok';
@@ -149,6 +154,19 @@ suite('koaSessMw session id on login', () => {
             expect(secondId).not.toBe(firstId);
             expect(store.get(firstId!)).toBeUndefined();
             expect(store.get(secondId!)?.auth?.username).toBe('other');
+        } finally {
+            close();
+        }
+    });
+
+    it('leaves no session behind when a login fails after the session was written', async () => {
+        const { store, call, close } = await startServer();
+        try {
+            const { issued: anonId } = await call('/anon');
+            expect(store.size).toBe(1);
+            const { issued } = await call('/login-then-fail', anonId);
+            expect(issued).toBe('unset');
+            expect(store.size).toBe(0);
         } finally {
             close();
         }

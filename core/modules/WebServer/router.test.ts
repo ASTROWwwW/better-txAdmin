@@ -10,7 +10,8 @@ vi.mock('@routes/index', () => new Proxy({}, {
 }));
 vi.mock('./middlewares/authMws', () => {
     const pass = async (ctx, next) => next();
-    return { apiAuthMw: pass, hostAuthMw: pass, intercomAuthMw: pass, webAuthMw: pass };
+    const needsSession = async (ctx, next) => (ctx.get('x-test-session') ? next() : (ctx.status = 401));
+    return { apiAuthMw: needsSession, hostAuthMw: pass, intercomAuthMw: pass, webAuthMw: pass };
 });
 
 import createRouter from './router';
@@ -28,8 +29,10 @@ const startServer = async () => {
     const server = http.createServer(app.callback());
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const { port } = server.address();
-    const post = async (path: string, ip: string) => {
-        const res = await fetch(`http://127.0.0.1:${port}${path}`, { method: 'POST', headers: { 'x-test-ip': ip } });
+    const post = async (path: string, ip: string, withSession = true) => {
+        const headers: Record<string, string> = { 'x-test-ip': ip };
+        if (withSession) headers['x-test-session'] = '1';
+        const res = await fetch(`http://127.0.0.1:${port}${path}`, { method: 'POST', headers });
         return { status: res.status, body: await res.text() };
     };
     return { post, close: () => server.close() };
@@ -67,6 +70,18 @@ suite('router rate limits', () => {
             const blocked = await post('/auth/changePassword', '203.0.113.9');
             expect(blocked.status).toBe(429);
             expect(blocked.body).toContain('Too many attempts');
+        } finally {
+            close();
+        }
+    });
+
+    it('does not spend the login attempts of an ip on /auth/changePassword requests that have no session', async () => {
+        const { post, close } = await startServer();
+        try {
+            for (let i = 0; i < ATTEMPTS * 2; i++) {
+                expect((await post('/auth/changePassword', '203.0.113.9', false)).status).toBe(401);
+            }
+            expect((await post('/auth/password', '203.0.113.9')).status).toBe(200);
         } finally {
             close();
         }

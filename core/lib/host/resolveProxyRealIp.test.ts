@@ -99,9 +99,19 @@ suite('limiterKey', () => {
         expect(limiterKey(`${UNRESOLVED_CLIENT_IP}:10.0.0.1`)).toBe(`${UNRESOLVED_CLIENT_IP}:10.0.0.1`);
     });
 
-    it('keeps an ipv4-mapped ipv6 socket address as it is, so those clients do not share a bucket', () => {
-        expect(limiterKey('::ffff:203.0.113.9')).toBe('::ffff:203.0.113.9');
+    it('turns an ipv4-mapped ipv6 address into the ipv4 one, in every notation, and never into a shared /64', () => {
+        expect(limiterKey('::ffff:203.0.113.9')).toBe('203.0.113.9');
+        expect(limiterKey('::ffff:cb00:7109')).toBe('203.0.113.9');
+        expect(limiterKey('0:0:0:0:0:ffff:cb00:7109')).toBe('203.0.113.9');
+        expect(limiterKey('::FFFF:203.0.113.10')).toBe('203.0.113.10');
         expect(limiterKey('::ffff:203.0.113.10')).not.toBe(limiterKey('::ffff:203.0.113.9'));
+    });
+
+    it('ignores the case and the notation of the address', () => {
+        const key = limiterKey('2001:db8:1:2::1');
+        expect(limiterKey('2001:DB8:1:2::1')).toBe(key);
+        expect(limiterKey('2001:0db8:0001:0002:0000:0000:0000:0001')).toBe(key);
+        expect(limiterKey('2001:db8:1:2::1.2.3.4')).toBe(key);
     });
 
     it('gives the same bucket to every address of a /64', () => {
