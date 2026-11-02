@@ -175,6 +175,17 @@ lua.eval('run_threads_once')()
 flood = [e for e in payload_entries(lua) if e['type'] == 'CommandExecuted']
 check('a flood from one client is capped at 2000 entries per flush', len(flood) == 2000, len(flood))
 
+lua = env(('logger', current('resource/sv_logger.lua')))
+for i in range(2500): lua.eval('call_event')('chatMessage', 7, 7, 'name', 'hello')
+lua.execute("for i = 1, 5 do LOCAL_HANDLERS['txsv:logger:addChatMessage'](0, 'announcement', 'internal') end")
+lua.eval('run_threads_once')()
+chat = [e for e in payload_entries(lua) if e['type'] == 'ChatMessage']
+check('a flood of chatMessage net events is capped at 2000 entries per flush', len([e for e in chat if e['data']['text'] == 'hello']) == 2000, len(chat))
+lua = env(('logger', current('resource/sv_logger.lua')))
+lua.execute("for i = 1, 5 do LOCAL_HANDLERS['txsv:logger:addChatMessage'](0, 'announcement', 'internal') end")
+lua.eval('run_threads_once')()
+check('the internal chat log event of txAdmin itself is still logged', len([e for e in payload_entries(lua) if e['type'] == 'ChatMessage']) == 5)
+
 lua = logger('base, before the fix (negative control)', old('resource/sv_logger.lua'))
 entries = payload_entries(lua)
 check('base accepts a table killer and 1000-char causes (the gap is real)', len([e for e in entries if e['type'] == 'DeathNotice']) == 3 and any(len(e['data']['cause']) == 1000 for e in entries if e['type'] == 'DeathNotice'))
@@ -182,6 +193,10 @@ lua = env(('logger', old('resource/sv_logger.lua')))
 for i in range(2500): lua.eval('call_event')('txaLogger:CommandExecuted', 7, 'cmd')
 lua.eval('run_threads_once')()
 check('base has no cap (2500 entries)', len([e for e in payload_entries(lua) if e['type'] == 'CommandExecuted']) == 2500)
+lua = env(('logger', old('resource/sv_logger.lua')))
+for i in range(2500): lua.eval('call_event')('chatMessage', 7, 7, 'name', 'hello')
+lua.eval('run_threads_once')()
+check('base has no cap on chatMessage either (2500 entries)', len([e for e in payload_entries(lua) if e['type'] == 'ChatMessage']) == 2500)
 
 # ---------------------------------------------------------------- menu handlers
 def menu(label, main_text, modal_text):

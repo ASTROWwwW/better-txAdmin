@@ -214,13 +214,18 @@ end
 local checkControlsFunc = IS_FIVEM and fivemCheckControls or redmCheckControls
 
 
+local instructionalGeneration = 0
+
 --- Creates and draws the instructional scaleform
 local function createInstructionalThreads()
     debugPrint('Starting instructional buttons thread')
+    --a new start (cycling to the next player) replaces the threads of the previous one
+    instructionalGeneration = instructionalGeneration + 1
+    local generation = instructionalGeneration
     --drawing thread
     CreateThread(function()
         local fivemScaleform = IS_FIVEM and makeFivemInstructionalScaleform(keysTable)
-        while isSpectateEnabled do
+        while isSpectateEnabled and generation == instructionalGeneration do
             if IS_FIVEM then
                 DrawScaleformMovieFullscreen(fivemScaleform, 255, 255, 255, 255, 0)
             else
@@ -229,8 +234,8 @@ local function createInstructionalThreads()
             Wait(0)
         end
 
-        --cleanup of the scaleform movie
-        if IS_FIVEM then
+        --cleanup of the scaleform movie, not when the next thread is still drawing
+        if IS_FIVEM and not isSpectateEnabled then
             SetScaleformMovieAsNoLongerNeeded()
         end
         debugPrint('Finished drawer thread')
@@ -238,7 +243,7 @@ local function createInstructionalThreads()
 
     --controls thread for redm - disabled when menu is visible
     CreateThread(function()
-        while isSpectateEnabled do
+        while isSpectateEnabled and generation == instructionalGeneration do
             if not isMenuVisible then
                 checkControlsFunc()
             end

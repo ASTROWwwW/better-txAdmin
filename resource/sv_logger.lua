@@ -257,5 +257,8 @@ local function logChatMessage(src, author, text)
     }
     logger(src, 'ChatMessage', logData)
 end
-RegisterNetEvent('chatMessage', logChatMessage)
+RegisterNetEvent('chatMessage', function(src, author, text)
+    if not isClientLogAccepted() then return end
+    logChatMessage(src, author, text)
+end)
 AddEventHandler('txsv:logger:addChatMessage', logChatMessage)
