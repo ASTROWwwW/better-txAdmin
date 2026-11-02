@@ -2,6 +2,7 @@ import { txDevEnv } from '@core/globalData';
 import Router from '@koa/router';
 import KoaRateLimit from 'koa-ratelimit';
 
+import { limiterKey } from '@lib/host/resolveProxyRealIp';
 import * as routes from '@routes/index';
 import { apiAuthMw, hostAuthMw, intercomAuthMw, webAuthMw } from './middlewares/authMws';
 
@@ -23,7 +24,7 @@ export default () => {
         }),
         max: txConfig.webServer.limiterAttempts,
         disableHeader: true,
-        id: (ctx: any) => ctx.txVars.realIP,
+        id: (ctx: any) => limiterKey(ctx.txVars.realIP),
     });
 
     //Rendered Pages
@@ -46,7 +47,7 @@ export default () => {
     router.post('/auth/addMaster/save', authLimiter, routes.auth_addMasterSave);
     router.get('/auth/cfxre/redirect', authLimiter, routes.auth_providerRedirect);
     router.post('/auth/cfxre/callback', authLimiter, routes.auth_providerCallback);
-    router.post('/auth/changePassword', apiAuthMw, routes.auth_changePassword);
+    router.post('/auth/changePassword', apiAuthMw, authLimiter, routes.auth_changePassword);
     router.get('/auth/getIdentifiers', apiAuthMw, routes.auth_getIdentifiers);
     router.post('/auth/changeIdentifiers', apiAuthMw, routes.auth_changeIdentifiers);
 

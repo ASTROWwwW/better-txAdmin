@@ -71,3 +71,98 @@ suite('koaSessMw cookie Secure flag', () => {
         expect(res.setCookie.toLowerCase()).not.toContain('secure');
     });
 });
+
+
+suite('koaSessMw session id on login', () => {
+    const COOKIE = 'txAdmin-test';
+    const PLANTED = '11111111-1111-4111-8111-111111111111';
+    const AUTH = { type: 'password', username: 'admin', password_hash: 'hash', expires_at: false, csrfToken: 'csrf' };
+
+    const startServer = async () => {
+        const store = new SessionMemoryStorage();
+        const app = new Koa();
+        app.use(koaSessMw(COOKIE, store) as any);
+        app.use((ctx: any) => {
+            if (ctx.path === '/anon') ctx.sessTools.set({ tmpOauthLoginStateKern: 'state' });
+            if (ctx.path === '/login') ctx.sessTools.set({ auth: AUTH });
+            if (ctx.path === '/login-other') ctx.sessTools.set({ auth: { ...AUTH, username: 'other' } });
+            ctx.body = 'ok';
+        });
+        const server = http.createServer(app.callback());
+        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+        const { port } = server.address() as AddressInfo;
+        const call = async (path: string, cookieId?: string) => {
+            const headers: Record<string, string> = cookieId ? { cookie: `${COOKIE}=${cookieId}` } : {};
+            const res = await fetch(`http://127.0.0.1:${port}${path}`, { headers });
+            const issued = new RegExp(`${COOKIE}=([^;]+)`).exec(res.headers.get('set-cookie') ?? '')?.[1];
+            return { issued };
+        };
+        return { store, call, close: () => server.close() };
+    };
+
+    it('does not keep a session id chosen by the client', async () => {
+        const { store, call, close } = await startServer();
+        try {
+            const { issued } = await call('/login', PLANTED);
+            expect(issued).toBeTruthy();
+            expect(issued).not.toBe(PLANTED);
+            expect(store.get(PLANTED)).toBeUndefined();
+            expect(store.get(issued!)?.auth).toBeTruthy();
+        } finally {
+            close();
+        }
+    });
+
+    it('gives a new id when an anonymous session logs in, and drops the old one', async () => {
+        const { store, call, close } = await startServer();
+        try {
+            const { issued: anonId } = await call('/anon');
+            expect(store.get(anonId!)?.auth).toBeUndefined();
+            const { issued: loggedId } = await call('/login', anonId);
+            expect(loggedId).toBeTruthy();
+            expect(loggedId).not.toBe(anonId);
+            expect(store.get(anonId!)).toBeUndefined();
+            expect(store.get(loggedId!)?.auth).toBeTruthy();
+        } finally {
+            close();
+        }
+    });
+
+    it('keeps the id when a session that is already logged in is written again', async () => {
+        const { store, call, close } = await startServer();
+        try {
+            const { issued: loggedId } = await call('/login');
+            const again = await call('/login', loggedId);
+            expect(again.issued ?? loggedId).toBe(loggedId);
+            expect(store.get(loggedId!)?.auth).toBeTruthy();
+        } finally {
+            close();
+        }
+    });
+
+    it('gives a new id when a session that is logged in as someone logs in as another admin', async () => {
+        const { store, call, close } = await startServer();
+        try {
+            const { issued: firstId } = await call('/login');
+            const { issued: secondId } = await call('/login-other', firstId);
+            expect(secondId).toBeTruthy();
+            expect(secondId).not.toBe(firstId);
+            expect(store.get(firstId!)).toBeUndefined();
+            expect(store.get(secondId!)?.auth?.username).toBe('other');
+        } finally {
+            close();
+        }
+    });
+
+    it('keeps the id when an anonymous session is written again without logging in', async () => {
+        const { store, call, close } = await startServer();
+        try {
+            const { issued: anonId } = await call('/anon');
+            const again = await call('/anon', anonId);
+            expect(again.issued ?? anonId).toBe(anonId);
+            expect(store.get(anonId!)).toBeTruthy();
+        } finally {
+            close();
+        }
+    });
+});

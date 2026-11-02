@@ -4,7 +4,7 @@ import { parseIpRanges } from './isIpInRanges';
 const hostConfig = vi.hoisted(() => ({ proxyIpRanges: undefined as any }));
 vi.mock('@core/globalData', () => ({ txHostConfig: hostConfig }));
 
-import { resolveProxyRealIp, UNRESOLVED_CLIENT_IP } from './resolveProxyRealIp';
+import { limiterKey, resolveProxyRealIp, UNRESOLVED_CLIENT_IP } from './resolveProxyRealIp';
 
 
 suite('resolveProxyRealIp', () => {
@@ -86,5 +86,44 @@ suite('resolveProxyRealIp', () => {
 
     it('ignores malformed entries and a missing header', () => {
         expect(resolveProxyRealIp('10.0.0.1', undefined)).toBeUndefined();
+    });
+});
+
+
+suite('limiterKey', () => {
+    it('keeps an ipv4 address as it is', () => {
+        expect(limiterKey('203.0.113.9')).toBe('203.0.113.9');
+    });
+
+    it('keeps the placeholder of an unreadable client as it is', () => {
+        expect(limiterKey(`${UNRESOLVED_CLIENT_IP}:10.0.0.1`)).toBe(`${UNRESOLVED_CLIENT_IP}:10.0.0.1`);
+    });
+
+    it('keeps an ipv4-mapped ipv6 socket address as it is, so those clients do not share a bucket', () => {
+        expect(limiterKey('::ffff:203.0.113.9')).toBe('::ffff:203.0.113.9');
+        expect(limiterKey('::ffff:203.0.113.10')).not.toBe(limiterKey('::ffff:203.0.113.9'));
+    });
+
+    it('gives the same bucket to every address of a /64', () => {
+        const key = limiterKey('2001:db8:1:2::1');
+        expect(key).toBe('2001:0db8:0001:0002');
+        expect(limiterKey('2001:db8:1:2:ffff:ffff:ffff:ffff')).toBe(key);
+        expect(limiterKey('2001:db8:1:2:abcd::9')).toBe(key);
+    });
+
+    it('gives another bucket to another /64', () => {
+        expect(limiterKey('2001:db8:1:3::1')).not.toBe(limiterKey('2001:db8:1:2::1'));
+        expect(limiterKey('2001:db8:2:2::1')).not.toBe(limiterKey('2001:db8:1:2::1'));
+    });
+
+    it('expands the compressed forms', () => {
+        expect(limiterKey('::1')).toBe('0000:0000:0000:0000');
+        expect(limiterKey('2001:db8::')).toBe('2001:0db8:0000:0000');
+        expect(limiterKey('fe80:0:0:1:2:3:4:5')).toBe('fe80:0000:0000:0001');
+    });
+
+    it('leaves what is not an address untouched', () => {
+        expect(limiterKey('not an ip')).toBe('not an ip');
+        expect(limiterKey('fe80::1%eth0')).toBe('fe80::1%eth0');
     });
 });

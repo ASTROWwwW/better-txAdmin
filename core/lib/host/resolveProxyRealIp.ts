@@ -88,3 +88,19 @@ export const resolveProxyRealIp = (socketIp: string, xffHeader: string | undefin
     // All IPs in the chain are trusted proxies — return the leftmost (split() always yields one entry)
     return leftmost as string;
 };
+
+
+/**
+ * Rate limiter bucket of a client: an ipv6 client owns a whole /64, so it cannot
+ * get a fresh bucket by changing the lower half of its address.
+ */
+export const limiterKey = (ip: string) => {
+    if (isIP(ip) !== 6 || !/^[0-9a-f:]+$/i.test(ip)) return ip;
+    const [head, tail] = ip.split('::');
+    const headGroups = head ? head.split(':') : [];
+    const tailGroups = tail ? tail.split(':') : [];
+    const groups = tail === undefined
+        ? headGroups
+        : [...headGroups, ...Array(8 - headGroups.length - tailGroups.length).fill('0'), ...tailGroups];
+    return groups.slice(0, 4).map((group) => group.padStart(4, '0')).join(':');
+};

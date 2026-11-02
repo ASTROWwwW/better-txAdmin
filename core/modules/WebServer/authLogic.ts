@@ -3,6 +3,7 @@ import { z } from "zod";
 import { txEnv } from '@core/globalData';
 import consoleFactory from '@lib/console';
 import { parseIdentifiersHeader } from '@lib/player/idUtils';
+import { safeEqual } from '@lib/safeEqual';
 import type { SessToolsType } from "./middlewares/sessionMws";
 import { ReactAuthDataType } from "@shared/authApiTypes";
 const console = consoleFactory(modulename);
@@ -246,10 +247,8 @@ export const nuiAuthLogic = (
         }
 
         // Check token value
-        if (reqHeader['x-txadmin-token'] !== txCore.webServer.luaComToken) {
-            const expected = txCore.webServer.luaComToken;
-            const censoredExpected = expected.slice(0, 6) + '...' + expected.slice(-6);
-            console.verbose.warn(`NUI Auth Failed: token received '${reqHeader['x-txadmin-token']}' !== expected '${censoredExpected}'.`);
+        if (!safeEqual(reqHeader['x-txadmin-token'], txCore.webServer.luaComToken)) {
+            console.verbose.warn('NUI Auth Failed: token mismatch.');
             return failResp('Unauthorized: token value');
         }
 
