@@ -169,11 +169,12 @@ end
 function toggleShowPlayerIDs(enabled, showNotification)
     if not menuIsAccessible then return end
 
+    local wasEnabled = isPlayerIdsEnabled
     isPlayerIdsEnabled = enabled
     local snackMessage
     if isPlayerIdsEnabled then
         snackMessage = 'nui_menu.page_main.player_ids.alert_show'
-        createGamerTagThread()
+        if not wasEnabled then createGamerTagThread() end
     else
         snackMessage = 'nui_menu.page_main.player_ids.alert_hide'
     end
