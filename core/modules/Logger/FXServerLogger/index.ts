@@ -21,7 +21,8 @@ const console = consoleFactory(modulename);
 // allow all printable
 // \x7F Delete character.
 const regexControls = /[\x00-\x08\x0B-\x1A\x1C-\x1F\x7F]|(?:\x1B\[|\x9B)[\d;]+[@-K]/g;
-const regexColors = /\x1B[^m]*?m/g;
+//Bounded: with an unbounded `[^m]*?` every ESC without a following `m` scanned the rest of the buffer (quadratic, 4s for 400kb)
+const regexColors = /\x1B[^m]{0,64}?m/g;
 
 
 export default class FXServerLogger extends LoggerBase {
@@ -44,9 +45,10 @@ export default class FXServerLogger extends LoggerBase {
         };
         super(basePath, 'fxserver', lrDefaultOptions, lrProfileConfig);
 
+        //The file write blocks the thread for the time of the whole buffer, so it is done in small pieces
         setInterval(() => {
             this.flushFileBuffer();
-        }, 5000);
+        }, 1000);
     }
 
 
