@@ -43,12 +43,17 @@ CreateThread(function()
             end
 
             --Sending logs via FD3 and resetting buffer
-            local payload = json.encode({
-                type = 'txAdminLogData',
-                logs = loggerBuffer
-            })
-            PrintStructuredTrace(payload)
+            local flushing = loggerBuffer
             loggerBuffer = {}
+            local encoded, payload = pcall(json.encode, {
+                type = 'txAdminLogData',
+                logs = flushing
+            })
+            if encoded then
+                PrintStructuredTrace(payload)
+            else
+                txPrint('^1Failed to encode ' .. #flushing .. ' log entries, they were dropped.')
+            end
         end
     end
 end)
@@ -222,6 +227,7 @@ end)
 -- The net events below can be triggered by any client, so the payload is validated and the buffer capped
 local CLIENT_LOG_BUFFER_LIMIT = 2000
 local CLIENT_LOG_MAX_LENGTH = 256
+local CLIENT_CHAT_MAX_LENGTH = 1024
 
 local function isClientLogAccepted()
     return #loggerBuffer < CLIENT_LOG_BUFFER_LIMIT
@@ -229,7 +235,7 @@ end
 
 RegisterNetEvent('txsv:logger:deathEvent', function(killer, cause)
     if not isClientLogAccepted() then return end
-    if type(cause) ~= 'string' or (killer and type(killer) ~= 'number') then return end
+    if type(cause) ~= 'string' or (killer and (type(killer) ~= 'number' or killer ~= killer)) then return end
     local logData = {
         cause = cause:sub(1, CLIENT_LOG_MAX_LENGTH),
         killer = killer
@@ -259,6 +265,9 @@ local function logChatMessage(src, author, text)
 end
 RegisterNetEvent('chatMessage', function(src, author, text)
     if not isClientLogAccepted() then return end
-    logChatMessage(src, author, text)
+    if type(author) ~= 'string' or type(text) ~= 'string' then return end
+    local sender = source
+    if type(sender) == 'number' and sender > 0 then src = sender end
+    logChatMessage(src, author:sub(1, CLIENT_LOG_MAX_LENGTH), text:sub(1, CLIENT_CHAT_MAX_LENGTH))
 end)
 AddEventHandler('txsv:logger:addChatMessage', logChatMessage)

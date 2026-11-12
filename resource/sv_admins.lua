@@ -18,6 +18,7 @@ end
 -- Variables & Consts
 local failedAuths = {}
 local attemptCooldown = 15000
+local pendingAuths = {}
 
 
 -- Handle auth failures
@@ -44,6 +45,8 @@ RegisterNetEvent('txsv:checkIfAdmin', function()
     if type(failedAuths[srcString]) == 'number' and failedAuths[srcString] + attemptCooldown > GetGameTimer() then
         return handleAuthFail(source, "too many auth attempts")
     end
+    if pendingAuths[srcString] then return end
+    pendingAuths[srcString] = true
 
     -- Prepping http request
     local url = "http://"..TX_LUACOMHOST.."/auth/self"
@@ -56,8 +59,9 @@ RegisterNetEvent('txsv:checkIfAdmin', function()
     -- Making http request
     PerformHttpRequest(url, function(httpCode, data, resultHeaders)
         -- Validating response
-        local resp = json.decode(data)
-        if not resp then
+        pendingAuths[srcString] = nil
+        local resp = type(data) == 'string' and json.decode(data)
+        if type(resp) ~= 'table' then
             return handleAuthFail(src, "invalid response")
         end
         if resp.logout ~= nil and resp.logout then
@@ -97,6 +101,7 @@ end)
 -- Remove admin from table when disconnected
 AddEventHandler('playerDropped', function()
     TX_ADMINS[tostring(source)] = nil
+    pendingAuths[tostring(source)] = nil
 end)
 
 

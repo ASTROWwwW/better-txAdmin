@@ -892,5 +892,88 @@ check('bringing an id that is not a connected player reaches nobody, even if Get
 fire(lua, 'txsv:req:bringPlayer', 5, 6)
 check('bringing a connected player still works', sent(lua, 'txcl:tpToCoords') == [6], sent(lua, 'txcl:tpToCoords'))
 
+# ---------------------------------------------------------------- second audit
+BEFORE_AUDIT2 = 'b49f62c2'  # the commit before the fixes checked below
+def before(path):
+    return subprocess.check_output(['git', '-C', REPO, 'show', f'{BEFORE_AUDIT2}:{path}'], text=True)
+
+def chat_env(text):
+    lua = env(('logger', text))
+    c = lua.eval('call_event')
+    c('chatMessage', 7, 'tx', 'txAdmin', 'forged announcement')
+    c('chatMessage', 7, 9, 'victim', 'forged for another player')
+    c('chatMessage', 7, 7, lua.eval('{}'), 'table author')
+    c('chatMessage', 7, 7, 'name', lua.eval('{}'))
+    c('chatMessage', 7, 7, 'n' * 600, 't' * 5000)
+    c('chatMessage', '', 4, 'local', 'from the chat resource')
+    lua.eval('run_threads_once')()
+    return [e for e in payload_entries(lua) if e['type'] == 'ChatMessage']
+
+print('[sv_logger.lua | chatMessage sent by a client]')
+chat = chat_env(current('resource/sv_logger.lua'))
+check('a client cannot log a chat line as txAdmin or as another player', all(e['src'] == 7 for e in chat if 'forged' in e['data']['text']) and len([e for e in chat if 'forged' in e['data']['text']]) == 2, [(e['src'], e['data']['text'][:12]) for e in chat])
+check('chat lines with a non-string author or text are dropped', not any(isinstance(e['data']['author'], (dict, list)) or isinstance(e['data']['text'], (dict, list)) for e in chat) and len(chat) == 4, len(chat))
+check('long author and text are truncated', any(len(e['data']['author']) == 256 and len(e['data']['text']) == 1024 for e in chat))
+check('a chat line relayed by a server resource keeps the id it was given', any(e['src'] == 4 and e['data']['author'] == 'local' for e in chat), [(e['src'], e['data']['author'][:6]) for e in chat])
+chat = chat_env(before('resource/sv_logger.lua'))
+check('before the fix the forged ids are logged as sent (the gap is real)', any(e['src'] == 'tx' for e in chat) and any(e['src'] == 9 for e in chat), [e['src'] for e in chat])
+
+print('[sv_logger.lua | a log entry that cannot be encoded]')
+BOOM = "local plain = json.encode; json.encode = function(v) if v.logs and #v.logs > 0 and v.logs[1].data == 'boom' then error('cannot encode') end return plain(v) end"
+def two_flushes(text):
+    lua = env(('logger', text))
+    lua.execute(BOOM)
+    lua.execute("FLUSH = coroutine.create(THREADS[1]); coroutine.resume(FLUSH)")
+    lua.eval('call_event')('txaLogger:CommandExecuted', 7, 'boom')
+    lua.execute("coroutine.resume(FLUSH)")
+    lua.eval('call_event')('txaLogger:CommandExecuted', 7, 'after')
+    lua.execute("coroutine.resume(FLUSH)")
+    return lua, [e for e in payload_entries(lua) if e['type'] == 'CommandExecuted']
+lua, cmds = two_flushes(current('resource/sv_logger.lua'))
+check('the flush thread survives and the next entries are still sent', lua.eval("coroutine.status(FLUSH)") == 'suspended' and [e['data'] for e in cmds] == ['after'], (lua.eval("coroutine.status(FLUSH)"), [e['data'] for e in cmds]))
+lua, cmds = two_flushes(before('resource/sv_logger.lua'))
+check('before the fix the flush thread dies and nothing is sent anymore (the bug is real)', lua.eval("coroutine.status(FLUSH)") == 'dead' and cmds == [], (lua.eval("coroutine.status(FLUSH)"), cmds))
+
+print('[sv_admins.lua | burst of auth requests]')
+ADMINS_PRELUDE = "function sendInitialPlayerlist() end; json.decode = function(d) if d == 'ok' then return { name = 'adm', permissions = {} } end return nil end; function PerformHttpRequest(url, cb) CAPTURED[#CAPTURED + 1] = cb end"
+def auth_burst(text):
+    lua = env()
+    lua.execute(ADMINS_PRELUDE)
+    lua.eval('load')(text, 'admins')()
+    for i in range(50): lua.eval('call_event')('txsv:checkIfAdmin', 8)
+    return lua
+lua = auth_burst(current('resource/sv_admins.lua'))
+check('fifty requests in a row from one player make a single http request', len(lua.eval('CAPTURED')) == 1, len(lua.eval('CAPTURED')))
+lua.execute("CAPTURED[1](200, 'ok', {})")
+check('the answer still authenticates the player', lua.eval("TX_ADMINS['8'] ~= nil and TX_ADMINS['8'].username == 'adm'"))
+lua.eval('call_event')('txsv:checkIfAdmin', 8)
+check('a new request is accepted once the first one was answered', len(lua.eval('CAPTURED')) == 2, len(lua.eval('CAPTURED')))
+lua.execute("ANSWERED = pcall(CAPTURED[2], 0, nil, {})")
+check('a failed http request (no body) rejects the player instead of throwing', lua.eval('ANSWERED') and lua.eval("TX_ADMINS['8'] == nil"))
+lua = auth_burst(before('resource/sv_admins.lua'))
+check('before the fix every request of the burst reaches txAdmin (the gap is real)', len(lua.eval('CAPTURED')) == 50, len(lua.eval('CAPTURED')))
+
+print('[sv_webpipe.lua | callback id and cache key]')
+def pipe_env(text):
+    lua = env(('webpipe', text))
+    lua.execute("function PerformHttpRequest(url, cb) CAPTURED[#CAPTURED + 1] = url; cb(200, 'body', {}) end")
+    return lua
+lua = pipe_env(current('resource/menu/server/sv_webpipe.lua'))
+lua.execute("FLOAT_OK = pcall(call_event, 'txsv:webpipe:req', 9, 1.5, 'GET', '/x', {}, '')")
+check('a fractional callback id from a non admin is ignored without throwing', lua.eval('FLOAT_OK') and len(lua.eval('EVENTS')) == 0, len(lua.eval('EVENTS')))
+for variant in ('/css/a.css', '/css//a.css', '/css///a.css', '/css/a.css?v=1', '/css//a.css?v=2'):
+    lua.eval('call_event')('txsv:webpipe:req', 5, 1, 'GET', variant, lua.eval('{}'), '')
+check('slash and query variants of a static file share one cache entry', len(lua.eval('CAPTURED')) == 3, list(lua.eval('CAPTURED').values()))
+lua = pipe_env(before('resource/menu/server/sv_webpipe.lua'))
+for variant in ('/css/a.css', '/css//a.css', '/css///a.css'):
+    lua.eval('call_event')('txsv:webpipe:req', 5, 1, 'GET', variant, lua.eval('{}'), '')
+lua.eval('call_event')('txsv:webpipe:req', 5, 1, 'GET', '/css//a.css', lua.eval('{}'), '')
+check('before the fix each slash variant is cached on its own (the gap is real)', len(lua.eval('CAPTURED')) == 3, list(lua.eval('CAPTURED').values()))
+
+print('[sv_player_mode.lua | mode that is not a string]')
+lua = menu_env('sv_player_mode.lua')
+lua.execute("function debugPrint(...) end; MODE_OK = pcall(call_event, 'txsv:req:changePlayerMode', 9, {})")
+check('a table as mode is refused without throwing', lua.eval('MODE_OK'))
+
 print(f'\n{PASS} checks passed, {FAIL} failed')
 sys.exit(1 if FAIL else 0)
