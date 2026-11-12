@@ -71,6 +71,9 @@ RegisterNetEvent('txsv:webpipe:req', function(callbackId, method, path, headers,
   if type(method) ~= 'string' or type(path) ~= 'string' or type(body) ~= 'string' then
     return
   end
+  if not method:match('^%a+$') or path:find('%c') then
+    return
+  end
 
   -- Reject large paths as we use regex
   if #path > 500 then
@@ -95,7 +98,7 @@ RegisterNetEvent('txsv:webpipe:req', function(callbackId, method, path, headers,
   end
 
   -- Return fast cache
-  if _pipeFastCache[path] ~= nil then
+  if method == 'GET' and _pipeFastCache[path] ~= nil then
     local cachedData = _pipeFastCache[path]
     sendResponse(s, callbackId, 200, path, cachedData.data, cachedData.headers, true)
     return
@@ -103,9 +106,10 @@ RegisterNetEvent('txsv:webpipe:req', function(callbackId, method, path, headers,
 
   -- Header names are case insensitive for the web server, so a client could add its own copy of the auth headers
   -- or of the proxy headers used to resolve the client ip
-  for name in pairs(headers) do
-    local lowerName = type(name) == 'string' and name:lower()
-    if not lowerName or lowerName:sub(1, 10) == 'x-txadmin-' or lowerName:sub(1, 12) == 'x-forwarded-' then
+  for name, value in pairs(headers) do
+    local lowerName = type(name) == 'string' and name:match('^[%w%-]+$') and name:lower()
+    local validValue = type(value) == 'string' and not value:find('%c')
+    if not lowerName or not validValue or lowerName:sub(1, 10) == 'x-txadmin-' or lowerName:sub(1, 12) == 'x-forwarded-' then
       headers[name] = nil
     end
   end
@@ -146,8 +150,9 @@ RegisterNetEvent('txsv:webpipe:req', function(callbackId, method, path, headers,
 
     -- cache response if it is a static file
     local sub = string.sub
+    local contentType = tostring(resultHeaders['Content-Type'] or resultHeaders['content-type'] or '')
     if 
-      httpCode == 200 and 
+      httpCode == 200 and method == 'GET' and not contentType:find('text/html', 1, true) and
       (
         sub(path, 1, 5) == '/css/' or 
         sub(path, 1, 4) == '/js/' or 

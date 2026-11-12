@@ -64,6 +64,9 @@ const bodySchema = z.object({
 //Helper to clean paths
 const cleanPath = (x: string) => slash(path.normalize(x));
 
+const hostConfigKeys = ['dataPath', 'cfgPath', 'startupArgs'] as const;
+const comparablePath = (x: string) => cleanPath(x).replace(/(?<=.)\/+$/, '');
+
 
 /**
  * Processes a settings save request
@@ -96,7 +99,33 @@ export default async function SaveSettingsConfigs(ctx: AuthedCtx) {
     }
     const cardId = paramsSchemaRes.data.card;
     const { resetKeys, changes: inputConfig } = bodySchemaRes.data;
-    const cardName = cardNamesMap[ctx.params.card as keyof typeof cardNamesMap] ?? 'UNKNOWN';
+    const inputServer = (inputConfig as any).server;
+    const touchesServerScope = inputServer !== undefined || resetKeys.some((key) => key.startsWith('server.'));
+    if (touchesServerScope && cardId !== 'fxserver') {
+        return sendTypedResp({
+            type: 'error',
+            msg: 'Server settings can only be changed from the FXServer card.',
+        });
+    }
+    const isSameHostValue = (key: typeof hostConfigKeys[number]) => {
+        const next = inputServer?.[key];
+        const current = txConfig.server[key];
+        if (next === undefined) return true;
+        if (typeof next === 'string' && typeof current === 'string') {
+            return comparablePath(next) === comparablePath(current);
+        }
+        return JSON.stringify(next) === JSON.stringify(current);
+    };
+    const changesHostConfig = hostConfigKeys.some((key) => {
+        return resetKeys.includes(`server.${key}`) || !isSameHostValue(key);
+    });
+    if (changesHostConfig && !ctx.admin.testPermission('all_permissions', modulename)) {
+        return sendTypedResp({
+            type: 'error',
+            msg: 'Only admins with all permissions can change the server paths or startup arguments.',
+        });
+    }
+    const cardName =cardNamesMap[ctx.params.card as keyof typeof cardNamesMap] ?? 'UNKNOWN';
 
     // FIXME:NEXT:UPDATE remove
     const displayCardName = cardName === 'Whitelist' ? 'Allowlist' : cardName;

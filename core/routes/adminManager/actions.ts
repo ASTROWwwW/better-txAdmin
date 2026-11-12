@@ -107,6 +107,7 @@ async function handleAdd(ctx: AuthedCtx) {
             }
         } catch (error) {
             console.error(`Failed to resolve CitizenFX ID to game identifier with error: ${(error as Error).message}`);
+            return ctx.send({ type: 'danger', message: 'Failed to resolve the CitizenFX ID, nothing was changed.' });
         }
     }
 
@@ -220,6 +221,7 @@ async function handleEdit(ctx: AuthedCtx) {
             }
         } catch (error) {
             console.error(`Failed to resolve CitizenFX ID to game identifier with error: ${(error as Error).message}`);
+            return ctx.send({ type: 'danger', message: 'Failed to resolve the CitizenFX ID, nothing was changed.' });
         }
     }
 
@@ -243,6 +245,13 @@ async function handleEdit(ctx: AuthedCtx) {
     //Check if editing an master admin
     if (!ctx.admin.isMaster && admin.master) {
         return ctx.send({ type: 'danger', message: 'You cannot edit an admin master.' });
+    }
+    if (
+        !ctx.admin.isMaster
+        && !ctx.admin.permissions.includes('all_permissions')
+        && admin.permissions.some((x: string) => !ctx.admin.permissions.includes(x))
+    ) {
+        return ctx.send({ type: 'danger', message: 'You cannot change an admin that has permissions you do not have.' });
     }
 
     //Check for privilege escalation
@@ -329,6 +338,13 @@ async function handleDelete(ctx: AuthedCtx) {
     //Check if editing an master admin
     if (admin.master) {
         return ctx.send({ type: 'danger', message: 'You cannot delete an admin master.' });
+    }
+    if (
+        !ctx.admin.isMaster
+        && !ctx.admin.permissions.includes('all_permissions')
+        && admin.permissions.some((x: string) => !ctx.admin.permissions.includes(x))
+    ) {
+        return ctx.send({ type: 'danger', message: 'You cannot change an admin that has permissions you do not have.' });
     }
 
     //Delete admin and give output
