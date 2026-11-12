@@ -114,6 +114,8 @@ suite('indexed daos', () => {
         expect(actions.findMany([], ['hw1']).map((a) => a.id)).toEqual([banId]);
         actions.revoke(banId, 'admin');
         expect(actions.findMany(['license:a'], undefined, { type: 'ban' })[0].revocation.author).toBe('admin');
+        expect(() => actions.revoke(banId, 'someone else')).toThrow('already revoked');
+        expect(actions.findMany(['license:a'], undefined, { type: 'ban' })[0].revocation.author).toBe('admin');
         actions.ackWarn(warnId);
         expect(actions.findOne(warnId).acked).toBe(true);
     });
@@ -216,7 +218,8 @@ suite('indexed daos', () => {
                 data.actions.at(-1).timestamp = Math.floor(random() * 6);
             },
             () => {
-                if (data.actions.length) actions.revoke(pick(data.actions).id, 'admin');
+                const revocable = data.actions.filter((a) => !a.revocation.timestamp);
+                if (revocable.length) actions.revoke(pick(revocable).id, 'admin');
             },
             () => {
                 const warns = data.actions.filter((a) => a.type === 'warn');

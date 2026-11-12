@@ -118,7 +118,7 @@ export default async function HistorySearch(ctx: AuthedCtx) {
                 if (validIds.length && !validIds.some((id) => a.ids.includes(id))) {
                     return false;
                 }
-                if (validHwids.length && 'hwids' in a &&  !validHwids.some((hwid) => a.hwids!.includes(hwid))) {
+                if (validHwids.length && !('hwids' in a && a.hwids && validHwids.some((hwid) => a.hwids!.includes(hwid)))) {
                     return false;
                 }
                 return true;

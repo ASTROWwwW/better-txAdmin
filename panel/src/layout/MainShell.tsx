@@ -33,6 +33,7 @@ export default function MainShell() {
 
     //Listener for messages from child iframes (legacy routes) or other sources
     useEventListener('message', (e: TxMessageEvent) => {
+        if (e.origin !== window.location.origin) return;
         if (e.data.type === 'logoutNotice') {
             expireSession('child iframe', 'got logoutNotice');
         } else if (e.data.type === 'openAccountModal') {

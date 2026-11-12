@@ -222,6 +222,7 @@ export default class ActionsDao {
             if (allowedTypes !== true && !allowedTypes.includes(action.type)) {
                 throw new Error(`you do not have permission to revoke this action`);
             }
+            if (action.revocation.timestamp) throw new Error(`action already revoked`);
 
             action.revocation = {
                 timestamp: now(),

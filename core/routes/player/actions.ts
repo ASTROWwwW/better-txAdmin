@@ -316,7 +316,7 @@ async function handleRemoveIds(ctx: AuthedCtx, player: PlayerClass): Promise<Gen
     if (!player.license || !player.isRegistered) {
         return { error: 'This player is not registered in the database, so there is no saved ID to delete.' };
     }
-    if (idsToDelete.includes(player.license)) {
+    if (idsToDelete.some((id) => id.toLowerCase() === `license:${player.license}`)) {
         return { error: 'You cannot remove the player\'s license from their IDs.' };
     }
     if (player instanceof ServerPlayer && player.isConnected) {

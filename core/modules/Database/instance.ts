@@ -235,9 +235,9 @@ export class DbInstance {
 
         if (this.#writePending === SavePriority.HIGH || sinceLastWrite > SAVE_CONFIG[this.#writePending].interval) {
             const writeTime = new TimeCounter();
+            this.#writePending = SavePriority.STANDBY;
             await this.writeDatabase();
             const timeElapsed = writeTime.stop();
-            this.#writePending = SavePriority.STANDBY;
             this.lastWrite = timeStart;
             // console.verbose.debug(`DB file saved, took ${timeElapsed.milliseconds}ms.`);
             txCore.metrics.txRuntime.databaseSaveTime.count(timeElapsed.milliseconds);
