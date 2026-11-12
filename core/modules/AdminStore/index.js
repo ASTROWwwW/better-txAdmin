@@ -422,6 +422,16 @@ export default class AdminStore {
         });
         if (adminIndex == -1) throw new Error('Admin not found');
 
+        //Check if the provider ids are already taken by another admin
+        for (const [providerName, providerData] of [['CitizenFX', citizenfxData], ['Discord', discordData]]) {
+            if (!providerData) continue;
+            const providerId = providerData.id.trim().toLowerCase();
+            const isTaken = this.admins.some((admin, index) => {
+                return index !== adminIndex && Object.values(admin.providers).some((p) => p.id.toLowerCase() === providerId);
+            });
+            if (isTaken) throw new Error(`${providerName} ID already taken`);
+        }
+
         // Check if name is being changed, if so change the old name to the new one
         if (typeof newName === 'string') {
             // Check if the name is already taken by another admin

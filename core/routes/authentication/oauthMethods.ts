@@ -20,7 +20,7 @@ export const getOauthRedirectUrl = (ctx: InitializedCtx, purpose: 'login' | 'add
         tmpOauthLoginStateKern: randomUUID(),
         tmpOauthLoginCallbackUri: callbackUrl,
     } satisfies ValidSessionType;
-    ctx.sessTools.set(sessData);
+    ctx.sessTools.set({ ...ctx.sessTools.get(), ...sessData });
 
     //Generate CitizenFX provider Auth URL
     const idmsAuthUrl = txCore.adminStore.providers.citizenfx.getAuthURL(

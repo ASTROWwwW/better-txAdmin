@@ -103,7 +103,7 @@ export default async function PlayerSearch(ctx: AuthedCtx) {
 
     // filter the players by the searchValue/searchType (VERY HEAVY!)
     if (typeof searchType === 'string') {
-        if (typeof searchValue !== 'string' || !searchValue.length) {
+        if (typeof searchValue !== 'string' || !searchValue.length || searchValue.length > 2048) {
             return sendTypedResp({ error: 'Invalid searchValue' });
         }
 

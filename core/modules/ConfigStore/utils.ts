@@ -1,6 +1,8 @@
 import type { RefreshConfigKey } from "./index";
 import { ConfigScaffold } from "./schema";
 
+const UNSAFE_KEYS = ['__proto__', 'constructor', 'prototype'];
+
 
 /**
  * A utility for manipulating a configuration scaffold with nested key-value structures.
@@ -18,6 +20,9 @@ export const confx = (cfg: any) => {
         },
         //Set a value in the config
         set: (scope: string, key: string, value: any) => {
+            if (UNSAFE_KEYS.includes(scope) || UNSAFE_KEYS.includes(key)) {
+                throw new Error(`Invalid config key: \`${scope}.${key}\``);
+            }
             cfg[scope] ??= {};
             cfg[scope][key] = value;
         },

@@ -8,7 +8,7 @@ import KoaBodyParser from 'koa-bodyparser';
 import KoaCors from '@koa/cors';
 
 import { Server as SocketIO } from 'socket.io';
-import WebSocket from './webSocket';
+import WebSocket, { isSocketRequestAllowed } from './webSocket';
 
 import { customAlphabet } from 'nanoid';
 import dict49 from 'nanoid-dictionary/nolookalikes';
@@ -155,7 +155,10 @@ export default class WebServer {
         // ===================
         // Setting up SocketIO
         // ===================
-        this.io = new SocketIO(HttpClass.createServer(), { serveClient: false });
+        this.io = new SocketIO(HttpClass.createServer(), {
+            serveClient: false,
+            allowRequest: (req, callback) => callback(null, isSocketRequestAllowed(req)),
+        });
         this.io.use(socketioSessMw(this.sessionCookieName, this.sessionStore));
         this.webSocket = new WebSocket(this.io);
         //@ts-ignore

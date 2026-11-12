@@ -78,7 +78,7 @@ export default async function HistorySearch(ctx: AuthedCtx) {
 
     // filter the actions by the searchValue/searchType (VERY HEAVY!)
     if (typeof searchType === 'string') {
-        if (typeof searchValue !== 'string' || !searchValue.length) {
+        if (typeof searchValue !== 'string' || !searchValue.length || searchValue.length > 2048) {
             return sendTypedResp({ error: 'Invalid searchValue' });
         }
 

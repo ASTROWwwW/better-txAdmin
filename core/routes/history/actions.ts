@@ -108,7 +108,7 @@ async function handleBandIds(ctx: AuthedCtx): Promise<GenericApiOkResp> {
     try {
         let kickMessage, durationTranslated;
         const tOptions: any = {
-            author: ctx.admin.name,
+            author: txCore.adminStore.getAdminPublicName(ctx.admin.name, 'punishment'),
             reason: reason,
         };
         if (expiration !== false && duration) {

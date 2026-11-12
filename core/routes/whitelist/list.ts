@@ -44,7 +44,7 @@ async function handleRequests(ctx: AuthedCtx) {
     //Filter by player name, discord tag and req id
     let filtered = requests;
     const searchString = ctx.request.query?.searchString;
-    if (typeof searchString === 'string' && searchString.length) {
+    if (typeof searchString === 'string' && searchString.length && searchString.length <= 256) {
         const fuse = new Fuse(requests, {
             keys: ['id', 'playerPureName', 'discordTag'],
             threshold: 0.3

@@ -8,6 +8,7 @@ suite('isSilentSystemCommand', () => {
         'txaEvent "screenshotRequested" "{\\"reqId\\":\\"abc\\",\\"netid\\":12,\\"quality\\":0.4}"',
         'txaEvent "screenStreamStart" "{\\"sessionId\\":\\"s\\",\\"token\\":\\"secret-upload-token\\"}"',
         'txaEvent "screenStreamStop" "{\\"sessionId\\":\\"s\\"}"',
+        'set "txAdmin-luaComToken" "secret-token"',
     ])('keeps this out of the console and the log: %s', (cmd) => {
         expect(isSilentSystemCommand(cmd)).toBe(true);
     });
@@ -18,6 +19,7 @@ suite('isSilentSystemCommand', () => {
         'txaEvent "scheduledRestart" "{}"',
         'say hello',
         'ensure monitor',
+        'set "sv_maxclients" "48"',
         '',
     ])('still shows %j', (cmd) => {
         expect(isSilentSystemCommand(cmd)).toBe(false);

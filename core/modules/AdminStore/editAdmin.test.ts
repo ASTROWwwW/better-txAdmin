@@ -30,6 +30,22 @@ suite('AdminStore.editAdmin', () => {
         expect(result).toBe(store.admins[0].password_hash);
     });
 
+    it('refuses an identifier that another admin already has', async () => {
+        const store = buildStore();
+        store.admins[1].providers = { citizenfx: { id: 'Alice', identifier: 'fivem:2', data: {} } };
+        await expect(store.editAdmin('bob', null, { id: 'alice', identifier: 'fivem:2' }, false))
+            .rejects.toThrow('CitizenFX ID already taken');
+        expect(store.admins[0].providers.citizenfx).toBeUndefined();
+        expect(store.writeAdminsFile).not.toHaveBeenCalled();
+    });
+
+    it('lets an admin save its own identifiers again', async () => {
+        const store = buildStore();
+        store.admins[0].providers = { citizenfx: { id: 'bob', identifier: 'fivem:1', data: {} } };
+        await store.editAdmin('bob', null, { id: 'bob', identifier: 'fivem:1' }, false);
+        expect(store.admins[0].providers.citizenfx.identifier).toBe('fivem:1');
+    });
+
     it('changing the identifiers keeps the password hash', async () => {
         const store = buildStore();
         await store.editAdmin('bob', null, { id: '1', identifier: 'fivem:1' }, false);

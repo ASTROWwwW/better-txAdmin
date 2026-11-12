@@ -41,6 +41,14 @@ suite('confx utility', () => {
         expect(config.scope1?.key2).toBe('value2');
     });
 
+    it('refuses keys that would write to the prototype of every object', () => {
+        const conf = confx({});
+        expect(() => conf.set('__proto__', 'polluted', true)).toThrow('Invalid config key');
+        expect(() => conf.set('scope1', '__proto__', true)).toThrow('Invalid config key');
+        expect(() => conf.set('constructor', 'prototype', true)).toThrow('Invalid config key');
+        expect(({} as any).polluted).toBeUndefined();
+    });
+
     it('should unset a value (unset)', () => {
         const config: ConfigScaffold = {
             scope1: {
