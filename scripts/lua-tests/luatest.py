@@ -893,7 +893,7 @@ fire(lua, 'txsv:req:bringPlayer', 5, 6)
 check('bringing a connected player still works', sent(lua, 'txcl:tpToCoords') == [6], sent(lua, 'txcl:tpToCoords'))
 
 # ---------------------------------------------------------------- second audit
-BEFORE_AUDIT2 = 'b49f62c2'  # the commit before the fixes checked below
+BEFORE_AUDIT2 = '737e774'  # master before the fixes checked below
 def before(path):
     return subprocess.check_output(['git', '-C', REPO, 'show', f'{BEFORE_AUDIT2}:{path}'], text=True)
 
