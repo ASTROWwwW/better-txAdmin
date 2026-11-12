@@ -8,6 +8,9 @@ on:
     branches:
       - "**"
 
+permissions:
+  contents: read
+
 jobs:
   run-tests:
     name: "Run Unit Testing"
@@ -36,3 +39,14 @@ jobs:
         env:
           CI: true
         run: npm run test --workspaces
+
+      - name: Run the Lua tests of the resource
+        run: |
+          pip install lupa
+          python3 scripts/lua-tests/luatest.py
+
+      - name: Check the locale files
+        run: npm run locale:check
+
+      - name: Build the project
+        run: GITHUB_REF=refs/tags/v0.0.0 npm run build
