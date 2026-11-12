@@ -1,10 +1,10 @@
-import type { GlobalSetupContext } from 'vitest/node'
+import type { TestProject } from 'vitest/node'
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
 
-export default function setup({ config, provide }: GlobalSetupContext) {
+export default function setup({ config, provide }: TestProject) {
     //Preparing fxspath
     const relativePath = os.platform() === 'win32'
         ? 'fxserver/'

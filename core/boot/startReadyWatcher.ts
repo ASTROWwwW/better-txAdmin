@@ -14,7 +14,7 @@ const console = consoleFactory();
 
 
 export const getPublicIp = async () => {
-    const zIpValidator = z.string().ip();
+    const zIpValidator = z.union([z.ipv4(), z.ipv6()]);
     const reqOptions = {
         timeout: { request: 2000 },
     };

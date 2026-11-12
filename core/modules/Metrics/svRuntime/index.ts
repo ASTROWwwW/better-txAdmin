@@ -208,7 +208,7 @@ export default class SvRuntimeMetrics {
         const validation = SvRtServerMemReportSchema.safeParse(payload);
         if (!validation.success) {
             console.verbose.warn('Invalid LogNodeHeapEvent payload:');
-            console.verbose.dir(validation.error.errors);
+            console.verbose.dir(validation.error.issues);
             return;
         }
         const { ts, used, limit, rss } = validation.data;

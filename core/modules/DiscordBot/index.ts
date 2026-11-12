@@ -1,5 +1,6 @@
 const modulename = 'DiscordBot';
-import Discord, { ActivityType, ChannelType, Client, EmbedBuilder, GatewayIntentBits } from 'discord.js';
+import { ActivityType, ChannelType, Client, EmbedBuilder, GatewayIntentBits, Status } from 'discord.js';
+import type { ClientOptions, Guild, ImageURLOptions, NewsChannel, TextChannel } from 'discord.js';
 import slashCommands from './slash';
 import interactionCreateHandler from './interactionCreateHandler';
 import { generateStatusMessage } from './commands/status';
@@ -38,7 +39,7 @@ export default class DiscordBot {
         'discordBot.embedConfigJson',
     ];
 
-    readonly #clientOptions: Discord.ClientOptions = {
+    readonly #clientOptions: ClientOptions = {
         intents: [
             GatewayIntentBits.Guilds,
             GatewayIntentBits.GuildMembers,
@@ -56,9 +57,9 @@ export default class DiscordBot {
     }
     readonly cooldowns = new Map();
     #client: Client | undefined;
-    guild: Discord.Guild | undefined;
+    guild: Guild | undefined;
     guildName: string | undefined;
-    announceChannel: Discord.TextBasedChannel | undefined;
+    announceChannel: TextChannel | NewsChannel | undefined;
     #lastDisallowedIntentsError: number = 0; //ms
     #lastGuildMembersCacheRefresh: number = 0; //ms
     #lastStatus = DiscordBotStatus.Disabled;
@@ -137,7 +138,7 @@ export default class DiscordBot {
     get status(): DiscordBotStatus {
         if (!txConfig.discordBot.enabled) {
             return DiscordBotStatus.Disabled;
-        } else if (this.#client?.ws.status === Discord.Status.Ready) {
+        } else if (this.#client?.ws.status === Status.Ready) {
             return DiscordBotStatus.Ready;
         } else {
             return this.#lastExplicitStatus;
@@ -476,7 +477,7 @@ export default class DiscordBot {
      */
     async resolveMemberProfile(uid: string) {
         if (!this.#client?.isReady()) throw new Error(`discord bot not ready yet`);
-        const avatarOptions: Discord.ImageURLOptions = { size: 64, forceStatic: true };
+        const avatarOptions: ImageURLOptions = { size: 64, forceStatic: true };
 
         //Check if in guild member
         if (this.guild) {

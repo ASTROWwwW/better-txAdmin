@@ -136,7 +136,7 @@ export default class PlayerDropMetrics {
         //Parsing data
         const validation = PDLServerBootDataSchema.safeParse(rawPayload);
         if (!validation.success) {
-            console.warn(`Invalid server boot data: ${validation.error.errors}`);
+            console.warn(`Invalid server boot data: ${validation.error.issues}`);
             return;
         }
         const { gameName, gameBuild, fxsVersion, resources } = validation.data;
