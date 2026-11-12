@@ -1,5 +1,7 @@
 import { suite, it, expect, test, vi, beforeEach } from 'vitest';
-import { getMutableConvars, sanitizeConsoleArgString, stringifyConsoleArgs } from './utils';
+import { PassThrough } from 'node:stream';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { getMutableConvars, pipeJsonValues, sanitizeConsoleArgString, stringifyConsoleArgs } from './utils';
 
 const fxsArgsParser = (str: string) => {
     const args: string[] = [];
@@ -207,5 +209,28 @@ suite('getMutableConvars allowlist instructions', () => {
         it('escapes line breaks in the spawn argument', () => {
             expect(findInstructions(true)).toEqual(['+sets', 'sv_allowlistInstructions', 'line1\\nline2']);
         });
+    });
+});
+
+
+suite('pipeJsonValues', () => {
+    it('keeps reading the values that come after a malformed one', async () => {
+        const source = new PassThrough();
+        const values: unknown[] = [];
+        const errors: Error[] = [];
+        pipeJsonValues(source, (trace) => values.push(trace.value), (error) => errors.push(error));
+
+        source.write('{"a":1}\n{"b":');
+        await sleep(10);
+        source.write('2}\n');
+        await sleep(10);
+        source.write('{"c": oops }\n');
+        await sleep(10);
+        source.write('{"d":4}\n');
+        await sleep(10);
+
+        expect(values).toEqual([{ a: 1 }, { b: 2 }, { d: 4 }]);
+        expect(errors).toHaveLength(1);
+        expect(source.isPaused()).toBe(false);
     });
 });

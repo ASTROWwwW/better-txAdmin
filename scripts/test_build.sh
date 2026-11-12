@@ -26,7 +26,7 @@ else
 fi
 
 # copying and running target fxserver
-rm -rf "${TARGET_PATH}/citizen/system_resources/monitor/*"
+rm -rf "${TARGET_PATH}/citizen/system_resources/monitor/"*
 cp -r dist/* "${TARGET_PATH}/citizen/system_resources/monitor"
 cd $TARGET_PATH
 ./FXServer.exe

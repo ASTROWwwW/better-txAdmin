@@ -94,6 +94,7 @@ export default class TxRuntimeMetrics {
     registerFxserverBoot(seconds: number) {
         if (!Number.isInteger(seconds) || seconds < 0) {
             this.#fxServerBootSeconds = false;
+            return;
         }
         this.#fxServerBootSeconds = seconds;
         console.verbose.debug(`FXServer booted in ${seconds} seconds.`);
