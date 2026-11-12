@@ -178,7 +178,7 @@ local function handleTpNormally(x, y, z)
             if _finalZ ~= nil then break end
             debugPrint("Z calc attempt #" .. i .. " (" .. (i * DELAY) .. "ms)")
             _finalZ = FindZForCoords(x, y)
-            if _z == nil then
+            if _finalZ == nil then
                 debugPrint("Didn't resolve! Trying again in " .. DELAY)
                 Wait(DELAY)
             end
@@ -302,7 +302,7 @@ RegisterNetEvent('txcl:clearArea', function(radius)
     if IS_REDM then return end
     local curCoords = GetEntityCoords(PlayerPedId())
     local radiusToFloat = radius + 0.0
-    debugPrint(('Radius to clear %d'):format(radius))
+    debugPrint(('Radius to clear %s'):format(radius))
     -- WTF?: User reports that this native actually clears dead peds compared to
     -- ClearArea? Weird considering Gottfried updated this native from _CLEAR_AREA_OF_EVERYTHING
     -- after found nativedb info. Maybe needs research lmao?

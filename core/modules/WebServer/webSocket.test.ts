@@ -163,3 +163,25 @@ suite('WebSocket', () => {
         });
     });
 });
+
+
+suite('isSocketRequestAllowed', async () => {
+    const { isSocketRequestAllowed } = await import('./webSocket');
+
+    it.each([
+        '/socket.io/?EIO=4&transport=polling&t=abc',
+        '/socket.io/?EIO=4&transport=polling&t=abc&sid=xyz',
+        '/socket.io/?EIO=4&transport=websocket&sid=xyz',
+        '/socket.io/?EIO=4&transport=polling&rooms=liveconsole,playerlist',
+    ])('lets the transports of the panel through: %s', (url) => {
+        expect(isSocketRequestAllowed({ url })).toBe(true);
+    });
+
+    it.each([
+        '/socket.io/?EIO=4&transport=polling&j=0',
+        '/socket.io/?EIO=4&transport=polling&j=0&sid=xyz',
+        '/socket.io/?j=&EIO=4&transport=polling',
+    ])('refuses the JSONP polling transport: %s', (url) => {
+        expect(isSocketRequestAllowed({ url })).toBe(false);
+    });
+});

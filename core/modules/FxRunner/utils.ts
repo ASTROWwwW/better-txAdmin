@@ -5,6 +5,7 @@ import { txEnv, txHostConfig } from "@core/globalData";
 import { formatHostPort } from "@lib/host/isIpAddressLocal";
 import { redactStartupSecrets } from "@lib/misc";
 import path from "path";
+import streamValues from 'stream-json/streamers/stream-values.js';
 
 
 /**
@@ -262,3 +263,23 @@ export const setupCustomLocaleFile = async () => {
         console.tag('FXRunner').error(`Failed to copy custom locale file: ${(error as any).message}`);
     }
 }
+
+
+/**
+ * Parses a stream of concatenated JSON values (what FXServer writes to fd3) and hands each value to onValue.
+ * A value that is not JSON ends the parser, so a new one takes over: without it the source stays paused and
+ * nothing of fd3 (heartbeats, logs, playerlist) is read again until the server restarts.
+ */
+export const pipeJsonValues = (
+    source: Readable,
+    onValue: (trace: { key: number; value: any }) => void,
+    onError: (error: Error) => void,
+) => {
+    const parser = source.pipe(streamValues.withParserAsStream());
+    parser.on('data', onValue);
+    parser.on('error', (error: Error) => {
+        source.unpipe(parser);
+        onError(error);
+        if (!source.destroyed) pipeJsonValues(source, onValue, onError);
+    });
+};

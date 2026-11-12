@@ -47,7 +47,7 @@ export default class Database {
      * Graceful shutdown handler - passing down to the db instance
      */
     public handleShutdown() {
-        this.#db.handleShutdown();
+        return this.#db.handleShutdown();
     }
 
 

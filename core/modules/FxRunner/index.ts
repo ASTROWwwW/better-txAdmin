@@ -1,6 +1,6 @@
+import type { Readable } from 'node:stream';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
-import StreamValues from 'stream-json/streamers/StreamValues';
 import { customAlphabet } from 'nanoid/non-secure';
 import dict49 from 'nanoid-dictionary/nolookalikes';
 import consoleFactory from '@lib/console';
@@ -8,7 +8,7 @@ import { resolveCFGFilePath, validateFixServerConfig } from '@lib/fxserver/fxsCo
 import { msToShortishDuration } from '@lib/misc';
 import { SYM_SYSTEM_AUTHOR } from '@lib/symbols';
 import { UpdateConfigKeySet } from '@modules/ConfigStore/utils';
-import { childProcessEventBlackHole, getFxSpawnVariables, getMutableConvars, isValidChildProcess, mutableConvarConfigDependencies, setupCustomLocaleFile, stringifyConsoleArgs } from './utils';
+import { childProcessEventBlackHole, getFxSpawnVariables, getMutableConvars, isValidChildProcess, mutableConvarConfigDependencies, pipeJsonValues, setupCustomLocaleFile, stringifyConsoleArgs } from './utils';
 import ProcessManager, { ChildProcessStateInfo } from './ProcessManager';
 import handleFd3Messages from './handleFd3Messages';
 import ConsoleLineEnum from '@modules/Logger/FXServerLogger/ConsoleLineEnum';
@@ -234,8 +234,11 @@ export default class FxRunner {
                 ConsoleLineEnum.StdErr,
             ),
         );
-        const jsoninPipe = childProc.stdio[3].pipe(StreamValues.withParser() as any);
-        jsoninPipe.on('data', handleFd3Messages.bind(null, newServerMutex));
+        pipeJsonValues(
+            childProc.stdio[3] as Readable,
+            handleFd3Messages.bind(null, newServerMutex),
+            (error) => console.verbose.warn(`Malformed data in the fd3 of FXServer: ${error.message}`),
+        );
 
         //_Almost_ don't care
         childProc.stdin.on('error', childProcessEventBlackHole);

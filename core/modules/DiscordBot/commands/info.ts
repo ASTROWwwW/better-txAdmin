@@ -1,5 +1,5 @@
 const modulename = 'DiscordBot:cmd:info';
-import { APIEmbedField, CommandInteraction, EmbedBuilder, EmbedData } from 'discord.js';
+import { APIEmbedField, ChatInputCommandInteraction, EmbedBuilder, EmbedData } from 'discord.js';
 import { parsePlayerId } from '@lib/player/idUtils';
 import { embedder } from '../discordHelpers';
 import { findPlayersByIdentifier } from '@lib/player/playerFinder';
@@ -20,7 +20,7 @@ const footer = {
 /**
  * Handler for /info
  */
-export default async (interaction: CommandInteraction) => {
+export default async (interaction: ChatInputCommandInteraction) => {
     const tsToLocaleDate = (ts: number) => {
         return new Date(ts * 1000).toLocaleDateString(
             txCore.translator.canonical,

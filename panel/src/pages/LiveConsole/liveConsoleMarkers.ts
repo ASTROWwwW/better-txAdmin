@@ -38,7 +38,7 @@ export const getTermLineRtlData = (line: string): TerminalMarkerGetterResult => 
                 txToast.warning({
                     title: 'Bidirectional Text Detected:',
                     md: true,
-                    msg: `Due to limitations, the terminal cannot display RTL text.\nThis is what the text is supposed to look like:\n\n${sanitizeTermLine(line)}`,
+                    msg: `Due to limitations, the terminal cannot display RTL text.\nThis is what the text is supposed to look like:\n\n\`\`\`\n${sanitizeTermLine(line).replace(/`/g, "'")}\n\`\`\``,
                 }, { duration: 7500 });
             },
         },

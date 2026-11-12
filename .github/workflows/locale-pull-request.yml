@@ -9,7 +9,7 @@ jobs:
   check-locale-pr:
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write
+      contents: read
 
     steps:
       - name: Use Node.js 22

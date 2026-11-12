@@ -59,9 +59,11 @@ export default function PlayerModal() {
         if (!playerRef) return;
         setModalData(undefined);
         setModalError('');
+        let isStale = false;
         playerQueryApi({
             queryParams: playerRef,
             success: (resp) => {
+                if (isStale) return;
                 if ('error' in resp) {
                     setModalError(resp.error);
                 } else {
@@ -74,9 +76,11 @@ export default function PlayerModal() {
                 }
             },
             error: (error) => {
+                if (isStale) return;
                 setModalError(error);
             },
         });
+        return () => { isStale = true; };
     }, [playerRef, currRefreshKey]);
 
     //Resetting selected tab when modal is closed

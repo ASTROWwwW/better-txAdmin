@@ -9,7 +9,7 @@
         "build": "vite build --mode production",
         "dev": "vite build --watch --mode development",
         "browser": "vite dev --port 40121 --strictPort --mode devNuiBrowser",
-        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "typecheck": "tsc -p tsconfig.typecheck.json",
         "license:report": "npx license-report > ../.reports/license/nui.html"
     },
     "keywords": [],
@@ -18,8 +18,9 @@
     "dependencies": {
         "@emotion/react": "^11.13.3",
         "@emotion/styled": "^11.13.0",
-        "@mui/icons-material": "^6.1.2",
+        "@mui/icons-material": "6.1.2",
         "@mui/material": "6.1.2",
+        "@mui/system": "^6.5.0",
         "notistack": "^3.0.1",
         "react-polyglot": "^0.7.2",
         "recoil": "^0.7.7"
@@ -28,10 +29,10 @@
         "@types/node-polyglot": "^2.5.0",
         "@types/react": "^18.3.11",
         "@types/react-dom": "^18.3.0",
-        "@vitejs/plugin-react-swc": "^3.7.1",
+        "@vitejs/plugin-react-swc": "^4.3.3",
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
-        "vite": "^5.4.8",
-        "vite-tsconfig-paths": "^5.0.1"
+        "vite": "^7.3.8",
+        "vite-tsconfig-paths": "^6.1.1"
     }
 }

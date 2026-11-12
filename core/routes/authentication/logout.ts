@@ -15,6 +15,9 @@ const console = consoleFactory(modulename);
  */
 export default async function AuthLogout(ctx: InitializedCtx) {
     ctx.sessTools.destroy();
+    txCore.webServer.webSocket.reCheckAdminAuths().catch((error) => {
+        console.verbose.error(`Failed to recheck the sockets after a logout: ${(error as Error).message}`);
+    });
 
     return ctx.send<ApiLogoutResp>({
         logout: true,

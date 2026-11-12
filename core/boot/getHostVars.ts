@@ -40,7 +40,7 @@ export const hostEnvVarSchemas = {
         (val) => val < 40120 || val > 40150,
         'FXS_PORT cannot be between 40120 and 40150'
     ),
-    INTERFACE: z.string().ip(),
+    INTERFACE: z.union([z.ipv4(), z.ipv6()]),
     PROXY_IP_RANGE: proxyIpRangeSchema,
 
     //Provider

@@ -9,6 +9,7 @@ import { createHash, randomInt } from 'node:crypto';
 import consoleFactory from '@lib/console.js';
 import fatalError from '@lib/fatalError.js';
 import { chalkInversePad } from '@lib/misc.js';
+import { safeEqual } from '@lib/safeEqual';
 const console = consoleFactory(modulename);
 
 //NOTE: The way I'm doing versioning right now is horrible but for now it's the best I can do
@@ -422,6 +423,18 @@ export default class AdminStore {
         });
         if (adminIndex == -1) throw new Error('Admin not found');
 
+        //Check if the provider ids are already taken by another admin
+        for (const [providerName, providerData] of [['CitizenFX', citizenfxData], ['Discord', discordData]]) {
+            if (!providerData) continue;
+            const providerId = providerData.id.trim().toLowerCase();
+            const isTaken = this.admins.some((admin, index) => {
+                return index !== adminIndex && Object.values(admin.providers).some((p) => {
+                    return p.id.toLowerCase() === providerId || p.identifier === providerData.identifier;
+                });
+            });
+            if (isTaken) throw new Error(`${providerName} ID already taken`);
+        }
+
         // Check if name is being changed, if so change the old name to the new one
         if (typeof newName === 'string') {
             // Check if the name is already taken by another admin
@@ -663,6 +676,26 @@ export default class AdminStore {
 
 
     /**
+     * Checks the PIN that lets the first visitor create the master account.
+     * The PIN has four digits, so after ten wrong ones in total it is disabled until txAdmin restarts.
+     * @param {unknown} pin
+     * @returns {'ok'|'wrong'|'locked'}
+     */
+    checkAddMasterPin(pin) {
+        if (typeof this.addMasterPin !== 'string') return 'locked';
+        if (typeof pin === 'string' && safeEqual(pin, this.addMasterPin)) return 'ok';
+        this.failedMasterPins = (this.failedMasterPins ?? 0) + 1;
+        if (this.failedMasterPins >= 10) {
+            this.addMasterPin = undefined;
+            console.error('Too many wrong master PINs were sent, the PIN is now disabled.');
+            console.error('Restart txAdmin to get a new PIN.');
+            return 'locked';
+        }
+        return 'wrong';
+    }
+
+
+    /**
      * Returns a random token to be used as CSRF Token.
      */
     genCsrfToken() {
@@ -678,8 +711,10 @@ export default class AdminStore {
         if (Array.isArray(this.admins) && this.admins.length) {
             return true;
         } else {
-            if (printPin) {
+            if (printPin && typeof this.addMasterPin === 'string') {
                 console.warn('Use this PIN to add a new master account: ' + chalkInversePad(this.addMasterPin));
+            } else if (printPin) {
+                console.warn('The master PIN is disabled after too many wrong ones, restart txAdmin to get a new PIN.');
             }
             return false;
         }

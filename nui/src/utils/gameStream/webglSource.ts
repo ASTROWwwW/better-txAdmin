@@ -104,7 +104,7 @@ export const createWebglSource = (provider: TextureProvider = gameTextureProvide
         canvas ??= document.createElement('canvas');
         const gl = canvas.getContext('webgl', { alpha: false, antialias: false, preserveDrawingBuffer: true });
         if (!gl) throw new Error('no webgl');
-        canvas.addEventListener('webglcontextlost', () => { state = undefined; }, { once: true });
+        canvas.addEventListener('webglcontextlost', (event) => { event.preventDefault(); state = undefined; }, { once: true });
 
         const program = gl.createProgram()!;
         gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, VERTEX));

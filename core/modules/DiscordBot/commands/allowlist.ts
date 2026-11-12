@@ -1,5 +1,5 @@
 const modulename = 'DiscordBot:cmd:whitelist';
-import { CommandInteraction as ChatInputCommandInteraction, ImageURLOptions } from 'discord.js';
+import { ChatInputCommandInteraction, ImageURLOptions } from 'discord.js';
 import { now } from '@lib/misc';
 import { DuplicateKeyError } from '@modules/Database/dbUtils';
 import { embedder, ensurePermission, logDiscordAdminAction } from '../discordHelpers';

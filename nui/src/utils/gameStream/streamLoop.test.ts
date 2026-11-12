@@ -1,12 +1,12 @@
-import { suite, it, describe, expect, vi, beforeEach, afterEach } from 'vitest';
+import { suite, it, describe, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { GameStream, type StreamDeps, type StreamStart } from './streamLoop';
 
 const CFG: StreamStart = { url: 'http://1.2.3.4:30120/monitor/stream/tok_abcdefghijklmnop', fps: 10, width: 640, quality: 0.5, ttlMs: 60_000 };
 
 suite('GameStream loop', () => {
     let clock: number;
-    let capture: ReturnType<typeof vi.fn>;
-    let send: ReturnType<typeof vi.fn>;
+    let capture: Mock<StreamDeps['source']['capture']>;
+    let send: Mock<StreamDeps['send']>;
     let released: number;
     let deps: StreamDeps;
     //Every sleep waits for the test to move the clock, so the loop never runs on its own

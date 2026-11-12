@@ -19,7 +19,7 @@ const written = (write) => write.mock.calls.map((call) => call[0]).join('');
 
 suite('FXServerLogger file flush', () => {
     beforeEach(() => {
-        vi.useFakeTimers();
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
         vi.stubGlobal('txConfig', { server: { quiet: true } });
         vi.stubGlobal('txCore', { webServer: { webSocket: { buffer: vi.fn() } } });
     });

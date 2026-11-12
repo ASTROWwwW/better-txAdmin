@@ -78,12 +78,12 @@ RegisterNetEvent('txcl:webpipe:resp', function(callbackId, statusCode, body, hea
     if not ret then return end
 
     local sub = string.sub
-    if
+    if statusCode == 200 and (
         sub(ret.path, 1, 5) == '/css/' or
         sub(ret.path, 1, 4) == '/js/' or
         sub(ret.path, 1, 5) == '/img/' or
         sub(ret.path, 1, 7) == '/fonts/'
-    then
+    ) then
         staticCacheData[ret.path] = {
             body = body,
             headers = headers,

@@ -9,7 +9,7 @@ local MAX_PTFX_TARGETS = 128
 RegisterNetEvent('txsv:req:changePlayerMode', function(mode, nearbyPlayers)
   local src = source
   if mode ~= 'godmode' and mode ~= 'noclip' and mode ~= 'superjump' and mode ~= 'none' then
-    debugPrint("Invalid player mode requested by " .. GetPlayerName(src) .. " (mode: " .. (mode or 'nil'))
+    debugPrint("Invalid player mode requested by " .. tostring(GetPlayerName(src)) .. " (mode: " .. tostring(mode))
     return
   end
 

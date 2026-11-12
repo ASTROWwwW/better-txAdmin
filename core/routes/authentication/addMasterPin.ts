@@ -33,9 +33,12 @@ export default async function AuthAddMasterPin(ctx: InitializedCtx) {
     }
 
     //Checking the PIN
-    if (!pin.length || pin !== txCore.adminStore.addMasterPin) {
+    const pinCheck = txCore.adminStore.checkAddMasterPin(pin);
+    if (pinCheck !== 'ok') {
         return ctx.send<ApiOauthRedirectResp>({
-            error: `Wrong PIN.`,
+            error: pinCheck === 'locked'
+                ? 'Too many wrong PINs. Restart txAdmin to get a new PIN.'
+                : 'Wrong PIN.',
         });
     }
 

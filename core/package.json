@@ -7,8 +7,8 @@
     "build": "cd ../ && npx tsx scripts/build/publish.ts",
     "dev": "cd ../ && npx tsx scripts/build/dev.ts",
     "test": "vitest",
-    "typecheck": "tsc -p tsconfig.json --noEmit | node ../scripts/typecheck-formatter.js",
-    "typecheck:full": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.typecheck.json | node ../scripts/typecheck-formatter.js",
+    "typecheck:full": "tsc -p tsconfig.typecheck.json",
     "lint": "eslint .",
     "lint:count": "eslint . -f ../scripts/lint-formatter.js",
     "lint:fix": "eslint . --fix",
@@ -25,7 +25,7 @@
     "cookie": "^0.7.0",
     "d3-array": "^3.2.4",
     "dateformat": "^5.0.3",
-    "discord.js": "14.11.0",
+    "discord.js": "^14.28.1",
     "ejs": "^3.1.10",
     "error-stack-parser": "^2.1.4",
     "execa": "^5.1.1",
@@ -42,7 +42,7 @@
     "lowdb": "^6.1.0",
     "mnemonist": "^0.39.8",
     "mysql2": "^3.11.3",
-    "nanoid": "^4.0.2",
+    "nanoid": "^5.1.16",
     "nanoid-dictionary": "^4.3.0",
     "node-polyglot": "^2.6.0",
     "node-stream-zip": "^1.15.0",
@@ -53,17 +53,18 @@
     "slug": "^8.2.3",
     "socket.io": "^4.8.0",
     "source-map-support": "^0.5.21",
-    "stream-json": "^1.9.1",
+    "stream-json": "^3.9.0",
     "string-argv": "^0.3.2",
     "systeminformation": "^5.23.5",
     "throttle-debounce": "^5.0.2",
     "unicode-emoji-json": "^0.8.0",
     "xss": "^1.0.15",
-    "zod": "^3.23.8",
-    "zod-validation-error": "^3.4.0"
+    "zod": "^4.6.7",
+    "zod-validation-error": "^5.0.0"
   },
   "devDependencies": {
     "@types/bytes": "^3.1.4",
+    "@types/cookie": "^0.6.0",
     "@types/d3-array": "^3.2.1",
     "@types/dateformat": "^5.0.2",
     "@types/ejs": "^3.1.5",
@@ -79,7 +80,6 @@
     "@types/semver": "^7.5.8",
     "@types/slug": "^5.0.9",
     "@types/source-map-support": "^0.5.10",
-    "@types/stream-json": "^1.7.7",
     "windows-release": "^4.0.0"
   }
 }

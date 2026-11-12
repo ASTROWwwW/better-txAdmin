@@ -54,7 +54,7 @@ export default class FxPlayerPositions {
         const validation = reportSchema.safeParse(payload);
         if (!validation.success) {
             console.verbose.warn('Invalid txAdminPlayerPositions payload:');
-            console.verbose.dir(validation.error.errors.slice(0, 3));
+            console.verbose.dir(validation.error.issues.slice(0, 3));
             return;
         }
 

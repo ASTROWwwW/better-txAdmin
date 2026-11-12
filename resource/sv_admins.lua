@@ -18,6 +18,8 @@ end
 -- Variables & Consts
 local failedAuths = {}
 local attemptCooldown = 15000
+local pendingAuths = {}
+local pendingAuthTimeout = 10000
 
 
 -- Handle auth failures
@@ -44,6 +46,9 @@ RegisterNetEvent('txsv:checkIfAdmin', function()
     if type(failedAuths[srcString]) == 'number' and failedAuths[srcString] + attemptCooldown > GetGameTimer() then
         return handleAuthFail(source, "too many auth attempts")
     end
+    local pendingSince = pendingAuths[srcString]
+    if pendingSince and GetGameTimer() - pendingSince < pendingAuthTimeout then return end
+    pendingAuths[srcString] = GetGameTimer()
 
     -- Prepping http request
     local url = "http://"..TX_LUACOMHOST.."/auth/self"
@@ -56,8 +61,9 @@ RegisterNetEvent('txsv:checkIfAdmin', function()
     -- Making http request
     PerformHttpRequest(url, function(httpCode, data, resultHeaders)
         -- Validating response
-        local resp = json.decode(data)
-        if not resp then
+        pendingAuths[srcString] = nil
+        local resp = type(data) == 'string' and json.decode(data)
+        if type(resp) ~= 'table' then
             return handleAuthFail(src, "invalid response")
         end
         if resp.logout ~= nil and resp.logout then
@@ -97,6 +103,7 @@ end)
 -- Remove admin from table when disconnected
 AddEventHandler('playerDropped', function()
     TX_ADMINS[tostring(source)] = nil
+    pendingAuths[tostring(source)] = nil
 end)
 
 
@@ -117,6 +124,7 @@ AddEventHandler('txAdmin:events:adminsUpdated', function(onlineAdminIDs)
     -- Resetting all admin permissions and rate limiter
     TX_ADMINS = {}
     failedAuths = {}
+    pendingAuths = {}
 
     -- Informing clients that they need to reauth
     for id, _ in pairs(refreshAdminIds) do

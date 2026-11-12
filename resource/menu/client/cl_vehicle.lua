@@ -407,6 +407,7 @@ RegisterNetEvent('txcl:seatInVehicle', function(vehNetID, seat, oldVehVelocity)
     local attemptsCounter = 0
     local attemptsLimit = 400 -- 400*5 = 2s
     while not NetworkDoesEntityExistWithNetworkId(vehNetID) and attemptsCounter < attemptsLimit do
+        attemptsCounter = attemptsCounter + 1
         Wait(5)
     end
     if not NetworkDoesEntityExistWithNetworkId(vehNetID) then
@@ -419,7 +420,7 @@ RegisterNetEvent('txcl:seatInVehicle', function(vehNetID, seat, oldVehVelocity)
         if seat == -1 then
             SetVehicleEngineOn(veh, true, true, false)
             SetVehicleOnGroundProperly(veh)
-            if type(oldVehVelocity) ~= 'vector3' then
+            if type(oldVehVelocity) == 'vector3' then
                 SetEntityVelocity(veh, oldVehVelocity)
             end
             sendSnackbarMessage('success', 'nui_menu.page_main.vehicle.spawn.dialog_success', true)

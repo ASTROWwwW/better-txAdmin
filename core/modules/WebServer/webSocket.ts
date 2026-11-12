@@ -35,6 +35,15 @@ type RoomNames = typeof VALID_ROOMS[number];
 
 
 //Helpers
+/**
+ * Refuses the JSONP polling transport of engine.io. A script tag sends the session cookie from any page of the
+ * same site (another port or subdomain) and hands the answer to that page, which the XHR and websocket
+ * transports the panel uses do not allow.
+ */
+export const isSocketRequestAllowed = (req: { url?: string }) => {
+    return !new URL(req.url ?? '/', 'http://localhost').searchParams.has('j');
+};
+
 const getIP = (socket: SocketWithSession) => {
     const socketIp = socket?.request?.socket?.remoteAddress ?? 'unknown';
     const xff = socket?.request?.headers?.['x-forwarded-for'];

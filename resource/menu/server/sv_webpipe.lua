@@ -65,7 +65,7 @@ end
 RegisterNetEvent('txsv:webpipe:req', function(callbackId, method, path, headers, body)
   local s = source
   local src = tostring(s)
-  if type(callbackId) ~= 'number' or type(headers) ~= 'table' then
+  if type(callbackId) ~= 'number' or math.tointeger(callbackId) == nil or type(headers) ~= 'table' then
     return
   end
   if type(method) ~= 'string' or type(path) ~= 'string' or type(body) ~= 'string' then
@@ -95,8 +95,9 @@ RegisterNetEvent('txsv:webpipe:req', function(callbackId, method, path, headers,
   end
 
   -- Return fast cache
-  if _pipeFastCache[path] ~= nil then
-    local cachedData = _pipeFastCache[path]
+  local cachePath = (path:gsub("//+", "/"))
+  if _pipeFastCache[cachePath] ~= nil then
+    local cachedData = _pipeFastCache[cachePath]
     sendResponse(s, callbackId, 200, path, cachedData.data, cachedData.headers, true)
     return
   end
@@ -156,7 +157,7 @@ RegisterNetEvent('txsv:webpipe:req', function(callbackId, method, path, headers,
       ) 
     then
       -- remove query params from path, so people can't consume memory by spamming cache-busters
-      for safePath in path:gmatch("([^?]+)") do
+      for safePath in cachePath:gmatch("([^?]+)") do
         local slimHeaders = {}
         for k, v in pairs(resultHeaders) do
           if k ~= 'Set-Cookie' then
