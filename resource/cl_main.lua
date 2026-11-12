@@ -223,7 +223,7 @@ end
 --- but checks the origin of the request to prevent CSRF attacks
 function RegisterSecureNuiCallback(callbackName, funcCallback)
     RegisterRawNuiCallback(callbackName, function(req, nuiCallback)
-        if not IsNuiRequestOriginValid(req.headers) then
+        if type(req.method) ~= 'string' or req.method:upper() ~= 'POST' or not IsNuiRequestOriginValid(req.headers) then
             debugPrint(("^1Invalid NUI callback origin for %s"):format(callbackName))
             return nuiCallback({
                 status = 403,
