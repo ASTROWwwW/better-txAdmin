@@ -16,6 +16,13 @@ suite('parseStreamMessage', () => {
         expect(parseStreamMessage({ action: 'screenStreamStop', data: {} }, null, self)).toEqual({ type: 'stop' });
     });
 
+    it('accepts a start posted by the parent window, the root page of the NUI', () => {
+        const parent = {};
+        const own = { parent };
+        expect(parseStreamMessage(start(), parent, own)?.type).toBe('start');
+        expect(parseStreamMessage(start(), {}, own)).toBeNull();
+    });
+
     it('ignores a message that comes from another window, like the iframe of the web panel', () => {
         expect(parseStreamMessage(start(), {} as any, self)).toBeNull();
         expect(parseStreamMessage({ action: 'screenStreamStop', data: {} }, {} as any, self)).toBeNull();

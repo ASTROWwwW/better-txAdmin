@@ -6,9 +6,10 @@ const URL_REGEX = /^http:\/\/[A-Za-z0-9.\-:[\]]{1,120}\/[A-Za-z0-9_-]{1,64}\/str
 export type StreamMessage = { type: 'start'; cfg: StreamStart } | { type: 'stop' };
 
 /**
- * Reads a message of the page for the live view. The game (cl_stream.lua) sends them without a source window, so a
- * message that comes from another window (the web panel runs in an iframe of this page) is ignored, and the address
- * has to have the shape of an upload address of this resource.
+ * Reads a message of the page for the live view. The game (cl_stream.lua) sends them through the root page of the
+ * NUI, the parent of this one, or without a source window. A message that comes from any other window (the web panel
+ * runs in an iframe of this page) is ignored, and the address has to have the shape of an upload address of this
+ * resource.
  * NOTE: the host is not pinned, this page cannot know the endpoint the game is connected to. The barrier is that only
  * this resource's own script sends the message, and it builds the address from the endpoint of the game itself.
  */
@@ -17,7 +18,8 @@ export const parseStreamMessage = (
     source: unknown,
     ownWindow: unknown,
 ): StreamMessage | null => {
-    if (source && source !== ownWindow) return null;
+    const parentWindow = (ownWindow as { parent?: unknown } | null)?.parent;
+    if (source && source !== ownWindow && source !== parentWindow) return null;
     if (!message || typeof message !== 'object') return null;
     const { action, data } = message as { action?: unknown; data?: unknown };
 

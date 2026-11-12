@@ -34,7 +34,7 @@ export const openExternalLink = (url: string) => {
     if (window.invokeNative) {
         window.invokeNative('openUrl', url);
     } else {
-        window.open(url, '_blank');
+        window.open(url, '_blank', 'noopener,noreferrer');
     }
 }
 
