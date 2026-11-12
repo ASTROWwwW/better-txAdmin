@@ -1,5 +1,5 @@
 import { suite, it, expect } from 'vitest';
-import { getHostLevelChanges } from './hostLevelChanges';
+import { dropHostLevelKeys, getHostLevelChanges } from './hostLevelChanges';
 
 const stored = { dataPath: '/srv/data', cfgPath: 'server.cfg', startupArgs: ['+set', 'x', '1'], onesync: 'on' };
 
@@ -30,5 +30,37 @@ suite('getHostLevelChanges', () => {
 
     it('counts a reset as a change', () => {
         expect(getHostLevelChanges({ server: { startupArgs: Symbol('reset') } }, stored)).toEqual(['server.startupArgs']);
+    });
+
+    it('does not take the startup arguments split again by the settings page for a change', () => {
+        const withSpace = { ...stored, startupArgs: ['+set', 'sv_hostname', 'My Server'] };
+        expect(getHostLevelChanges({ server: { startupArgs: ['+set', 'sv_hostname', 'My', 'Server'] } }, withSpace)).toEqual([]);
+        expect(getHostLevelChanges({ server: { startupArgs: ['+set', 'sv_hostname', 'Other'] } }, withSpace)).toEqual(['server.startupArgs']);
+    });
+});
+
+
+suite('dropHostLevelKeys', () => {
+    it('keeps another spelling of a path out of what gets saved', () => {
+        //each of these passes as unchanged, and each would point somewhere else once stored
+        for (const dataPath of ['\\srv\\data', '/srv/link/../data', '/srv/data/']) {
+            const changes: any = { server: { dataPath, cfgPath: 'x/../server.cfg', onesync: 'legacy' }, general: { serverName: 'x' } };
+            expect(getHostLevelChanges(changes, stored)).toEqual([]);
+            dropHostLevelKeys(changes);
+            expect(changes).toEqual({ server: { onesync: 'legacy' }, general: { serverName: 'x' } });
+        }
+    });
+
+    it('removes the server scope when nothing else is left in it', () => {
+        const changes: any = { server: { dataPath: '/srv/data', startupArgs: [] }, bans: { x: 1 } };
+        dropHostLevelKeys(changes);
+        expect(changes).toEqual({ bans: { x: 1 } });
+    });
+
+    it('leaves a request without server settings alone', () => {
+        const changes: any = { bans: { x: 1 } };
+        dropHostLevelKeys(changes);
+        dropHostLevelKeys(undefined);
+        expect(changes).toEqual({ bans: { x: 1 } });
     });
 });

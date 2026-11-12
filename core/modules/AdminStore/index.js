@@ -711,8 +711,10 @@ export default class AdminStore {
         if (Array.isArray(this.admins) && this.admins.length) {
             return true;
         } else {
-            if (printPin) {
+            if (printPin && typeof this.addMasterPin === 'string') {
                 console.warn('Use this PIN to add a new master account: ' + chalkInversePad(this.addMasterPin));
+            } else if (printPin) {
+                console.warn('The master PIN is disabled after too many wrong ones, restart txAdmin to get a new PIN.');
             }
             return false;
         }
