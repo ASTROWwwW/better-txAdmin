@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
-import StreamValues from 'stream-json/streamers/StreamValues';
+import streamValues from 'stream-json/streamers/stream-values.js';
 import { customAlphabet } from 'nanoid/non-secure';
 import dict49 from 'nanoid-dictionary/nolookalikes';
 import consoleFactory from '@lib/console';
@@ -234,7 +234,7 @@ export default class FxRunner {
                 ConsoleLineEnum.StdErr,
             ),
         );
-        const jsoninPipe = childProc.stdio[3].pipe(StreamValues.withParser() as any);
+        const jsoninPipe = childProc.stdio[3].pipe(streamValues.withParserAsStream());
         jsoninPipe.on('data', handleFd3Messages.bind(null, newServerMutex));
 
         //_Almost_ don't care
