@@ -42,7 +42,7 @@
     "lowdb": "^6.1.0",
     "mnemonist": "^0.39.8",
     "mysql2": "^3.11.3",
-    "nanoid": "^4.0.2",
+    "nanoid": "^5.1.16",
     "nanoid-dictionary": "^4.3.0",
     "node-polyglot": "^2.6.0",
     "node-stream-zip": "^1.15.0",
