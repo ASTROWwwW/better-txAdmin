@@ -18,6 +18,7 @@ import { generateStatusMessage } from '@modules/DiscordBot/commands/status';
 import { getSchemaChainError } from '@modules/ConfigStore/schema/utils';
 import { confx } from '@modules/ConfigStore/utils';
 import { SYM_RESET_CONFIG } from '@lib/symbols';
+import { getHostLevelChanges } from './hostLevelChanges';
 const console = consoleFactory(modulename);
 
 
@@ -135,6 +136,17 @@ export default async function SaveSettingsConfigs(ctx: AuthedCtx) {
             md: true,
             title: `Error processing the ${displayCardName} changes.`,
             msg: (error as any).message,
+        });
+    }
+
+    //Only an admin with all permissions can change where the server files are and how the server starts
+    const hostLevelChanges = getHostLevelChanges(configChanges as any, txConfig.server as any);
+    if (hostLevelChanges.length && !ctx.admin.hasPermission('all_permissions')) {
+        return sendTypedResp({
+            type: 'error',
+            md: true,
+            title: 'Missing permission',
+            msg: `Only admins with all permissions can change ${hostLevelChanges.map((k) => `\`${k}\``).join(', ')}.`,
         });
     }
 

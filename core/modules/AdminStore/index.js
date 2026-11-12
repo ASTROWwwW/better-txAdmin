@@ -9,6 +9,7 @@ import { createHash, randomInt } from 'node:crypto';
 import consoleFactory from '@lib/console.js';
 import fatalError from '@lib/fatalError.js';
 import { chalkInversePad } from '@lib/misc.js';
+import { safeEqual } from '@lib/safeEqual';
 const console = consoleFactory(modulename);
 
 //NOTE: The way I'm doing versioning right now is horrible but for now it's the best I can do
@@ -671,6 +672,26 @@ export default class AdminStore {
             console.verbose.error('Failed to refreshOnlineAdmins() with error:');
             console.verbose.dir(error);
         }
+    }
+
+
+    /**
+     * Checks the PIN that lets the first visitor create the master account.
+     * The PIN has four digits, so after ten wrong ones in total it is disabled until txAdmin restarts.
+     * @param {unknown} pin
+     * @returns {'ok'|'wrong'|'locked'}
+     */
+    checkAddMasterPin(pin) {
+        if (typeof this.addMasterPin !== 'string') return 'locked';
+        if (typeof pin === 'string' && safeEqual(pin, this.addMasterPin)) return 'ok';
+        this.failedMasterPins = (this.failedMasterPins ?? 0) + 1;
+        if (this.failedMasterPins >= 10) {
+            this.addMasterPin = undefined;
+            console.error('Too many wrong master PINs were sent, the PIN is now disabled.');
+            console.error('Restart txAdmin to get a new PIN.');
+            return 'locked';
+        }
+        return 'wrong';
     }
 
 
