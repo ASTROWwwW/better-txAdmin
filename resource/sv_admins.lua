@@ -19,6 +19,7 @@ end
 local failedAuths = {}
 local attemptCooldown = 15000
 local pendingAuths = {}
+local pendingAuthTimeout = 10000
 
 
 -- Handle auth failures
@@ -45,8 +46,9 @@ RegisterNetEvent('txsv:checkIfAdmin', function()
     if type(failedAuths[srcString]) == 'number' and failedAuths[srcString] + attemptCooldown > GetGameTimer() then
         return handleAuthFail(source, "too many auth attempts")
     end
-    if pendingAuths[srcString] then return end
-    pendingAuths[srcString] = true
+    local pendingSince = pendingAuths[srcString]
+    if pendingSince and GetGameTimer() - pendingSince < pendingAuthTimeout then return end
+    pendingAuths[srcString] = GetGameTimer()
 
     -- Prepping http request
     local url = "http://"..TX_LUACOMHOST.."/auth/self"
@@ -122,6 +124,7 @@ AddEventHandler('txAdmin:events:adminsUpdated', function(onlineAdminIDs)
     -- Resetting all admin permissions and rate limiter
     TX_ADMINS = {}
     failedAuths = {}
+    pendingAuths = {}
 
     -- Informing clients that they need to reauth
     for id, _ in pairs(refreshAdminIds) do

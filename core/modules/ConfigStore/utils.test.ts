@@ -47,6 +47,13 @@ suite('confx utility', () => {
         expect(() => conf.set('scope1', '__proto__', true)).toThrow('Invalid config key');
         expect(() => conf.set('constructor', 'prototype', true)).toThrow('Invalid config key');
         expect(({} as any).polluted).toBeUndefined();
+
+        const config: any = {};
+        conf.set('hasOwnProperty', 'call', true);
+        confx(config).set('toString', 'call', true);
+        expect(typeof Object.prototype.hasOwnProperty.call).toBe('function');
+        expect(typeof Object.prototype.toString.call).toBe('function');
+        expect(config.toString).toEqual({ call: true });
     });
 
     it('should unset a value (unset)', () => {

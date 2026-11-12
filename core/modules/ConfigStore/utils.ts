@@ -23,7 +23,7 @@ export const confx = (cfg: any) => {
             if (UNSAFE_KEYS.includes(scope) || UNSAFE_KEYS.includes(key)) {
                 throw new Error(`Invalid config key: \`${scope}.${key}\``);
             }
-            cfg[scope] ??= {};
+            if (!Object.prototype.hasOwnProperty.call(cfg, scope)) cfg[scope] = {};
             cfg[scope][key] = value;
         },
         //Remove a value from the config

@@ -427,7 +427,9 @@ export default class AdminStore {
             if (!providerData) continue;
             const providerId = providerData.id.trim().toLowerCase();
             const isTaken = this.admins.some((admin, index) => {
-                return index !== adminIndex && Object.values(admin.providers).some((p) => p.id.toLowerCase() === providerId);
+                return index !== adminIndex && Object.values(admin.providers).some((p) => {
+                    return p.id.toLowerCase() === providerId || p.identifier === providerData.identifier;
+                });
             });
             if (isTaken) throw new Error(`${providerName} ID already taken`);
         }

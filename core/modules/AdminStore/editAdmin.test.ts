@@ -39,6 +39,13 @@ suite('AdminStore.editAdmin', () => {
         expect(store.writeAdminsFile).not.toHaveBeenCalled();
     });
 
+    it('refuses an identifier another admin has under an older account name', async () => {
+        const store = buildStore();
+        store.admins[1].providers = { citizenfx: { id: 'OldName', identifier: 'fivem:2', data: {} } };
+        await expect(store.editAdmin('bob', null, { id: 'NewName', identifier: 'fivem:2' }, false))
+            .rejects.toThrow('CitizenFX ID already taken');
+    });
+
     it('lets an admin save its own identifiers again', async () => {
         const store = buildStore();
         store.admins[0].providers = { citizenfx: { id: 'bob', identifier: 'fivem:1', data: {} } };

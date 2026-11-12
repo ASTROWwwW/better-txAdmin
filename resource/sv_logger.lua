@@ -235,7 +235,7 @@ end
 
 RegisterNetEvent('txsv:logger:deathEvent', function(killer, cause)
     if not isClientLogAccepted() then return end
-    if type(cause) ~= 'string' or (killer and (type(killer) ~= 'number' or killer ~= killer)) then return end
+    if type(cause) ~= 'string' or (killer and (type(killer) ~= 'number' or math.tointeger(killer) == nil)) then return end
     local logData = {
         cause = cause:sub(1, CLIENT_LOG_MAX_LENGTH),
         killer = killer

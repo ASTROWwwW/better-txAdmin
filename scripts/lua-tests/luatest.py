@@ -918,6 +918,13 @@ check('a chat line relayed by a server resource keeps the id it was given', any(
 chat = chat_env(before('resource/sv_logger.lua'))
 check('before the fix the forged ids are logged as sent (the gap is real)', any(e['src'] == 'tx' for e in chat) and any(e['src'] == 9 for e in chat), [e['src'] for e in chat])
 
+lua = env(('logger', current('resource/sv_logger.lua')))
+for bad in ('1/0', '-1/0', '0/0', '1.5'):
+    lua.execute(f"call_event('txsv:logger:deathEvent', 7, {bad}, 'Pistol')")
+lua.eval('call_event')('txsv:logger:deathEvent', 7, 3, 'Pistol')
+lua.eval('run_threads_once')()
+check('a death notice with an infinite, NaN or fractional killer is dropped', [e['data']['killer'] for e in payload_entries(lua) if e['type'] == 'DeathNotice'] == [3])
+
 print('[sv_logger.lua | a log entry that cannot be encoded]')
 BOOM = "local plain = json.encode; json.encode = function(v) if v.logs and #v.logs > 0 and v.logs[1].data == 'boom' then error('cannot encode') end return plain(v) end"
 def two_flushes(text):
@@ -950,6 +957,10 @@ lua.eval('call_event')('txsv:checkIfAdmin', 8)
 check('a new request is accepted once the first one was answered', len(lua.eval('CAPTURED')) == 2, len(lua.eval('CAPTURED')))
 lua.execute("ANSWERED = pcall(CAPTURED[2], 0, nil, {})")
 check('a failed http request (no body) rejects the player instead of throwing', lua.eval('ANSWERED') and lua.eval("TX_ADMINS['8'] == nil"))
+lua = auth_burst(current('resource/sv_admins.lua'))
+lua.execute("function GetGameTimer() return 10001 end")
+lua.eval('call_event')('txsv:checkIfAdmin', 8)
+check('a request that was never answered stops blocking the player after ten seconds', len(lua.eval('CAPTURED')) == 2, len(lua.eval('CAPTURED')))
 lua = auth_burst(before('resource/sv_admins.lua'))
 check('before the fix every request of the burst reaches txAdmin (the gap is real)', len(lua.eval('CAPTURED')) == 50, len(lua.eval('CAPTURED')))
 
@@ -961,6 +972,8 @@ def pipe_env(text):
 lua = pipe_env(current('resource/menu/server/sv_webpipe.lua'))
 lua.execute("FLOAT_OK = pcall(call_event, 'txsv:webpipe:req', 9, 1.5, 'GET', '/x', {}, '')")
 check('a fractional callback id from a non admin is ignored without throwing', lua.eval('FLOAT_OK') and len(lua.eval('EVENTS')) == 0, len(lua.eval('EVENTS')))
+lua.execute("HUGE_OK = pcall(call_event, 'txsv:webpipe:req', 9, 1e300, 'GET', '/x', {}, '')")
+check('a callback id too large for an integer is ignored without throwing', lua.eval('HUGE_OK') and len(lua.eval('EVENTS')) == 0, len(lua.eval('EVENTS')))
 for variant in ('/css/a.css', '/css//a.css', '/css///a.css', '/css/a.css?v=1', '/css//a.css?v=2'):
     lua.eval('call_event')('txsv:webpipe:req', 5, 1, 'GET', variant, lua.eval('{}'), '')
 check('slash and query variants of a static file share one cache entry', len(lua.eval('CAPTURED')) == 3, list(lua.eval('CAPTURED').values()))

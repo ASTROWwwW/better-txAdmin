@@ -65,7 +65,7 @@ end
 RegisterNetEvent('txsv:webpipe:req', function(callbackId, method, path, headers, body)
   local s = source
   local src = tostring(s)
-  if type(callbackId) ~= 'number' or callbackId % 1 ~= 0 or type(headers) ~= 'table' then
+  if type(callbackId) ~= 'number' or math.tointeger(callbackId) == nil or type(headers) ~= 'table' then
     return
   end
   if type(method) ~= 'string' or type(path) ~= 'string' or type(body) ~= 'string' then
