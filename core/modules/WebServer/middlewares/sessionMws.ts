@@ -4,6 +4,8 @@ import { LRUCacheWithDelete } from "mnemonist";
 import { RawKoaCtx } from "../ctxTypes";
 import { Next } from "koa";
 import { randomUUID } from 'node:crypto';
+import { txHostConfig } from '@core/globalData';
+import { isIpInRanges } from '@lib/host/isIpInRanges';
 import { Socket } from "socket.io";
 import { parse as cookieParse } from 'cookie';
 import { SetOption as KoaCookieSetOption } from "cookies";
@@ -121,11 +123,10 @@ export const koaSessMw = (cookieName: string, store: SessionMemoryStorage) => {
 
     //Middleware
     return (ctx: RawKoaCtx, next: Next) => {
-        //We don't enable koa's `app.proxy` (ctx.ip/ctx.protocol stay based on the raw
-        //socket everywhere else), so we read X-Forwarded-Proto here directly, scoped to
-        //just this cookie's Secure attribute. Worst case if the header lies is the cookie
-        //failing to send over plain HTTP - never a downgrade of an actually-TLS request.
-        const isRequestSecure = ctx.secure || isForwardedHttps(ctx.headers['x-forwarded-proto']);
+        //Trust X-Forwarded-Proto only when the direct peer is in the configured proxy ranges.
+        //An arbitrary internet client must not be able to control cookie security attributes.
+        const trustedProxy = !!txHostConfig.proxyIpRanges && isIpInRanges(ctx.ip, txHostConfig.proxyIpRanges);
+        const isRequestSecure = ctx.secure || (trustedProxy && isForwardedHttps(ctx.headers['x-forwarded-proto']));
         const cookieOptions = { ...baseCookieOptions, secure: isRequestSecure } as KoaCookieSetOption;
         //Without app.proxy, `cookies` believes the connection is plain http and throws on any Secure cookie
         if (isRequestSecure) ctx.cookies.secure = true;
