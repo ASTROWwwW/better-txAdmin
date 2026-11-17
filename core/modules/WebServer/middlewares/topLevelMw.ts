@@ -88,7 +88,7 @@ const topLevelMw = async (ctx: RawKoaCtx, next: Next) => {
             const desc = [
                 `${prefix} Internal Error.`,
                 `Route: ${reqPath}`,
-                `Message: ${error.message}`,
+                'Message: An unexpected error occurred.',
                 'Make sure your txAdmin is updated.',
             ].join('\n');
             ctx.status = 500;
