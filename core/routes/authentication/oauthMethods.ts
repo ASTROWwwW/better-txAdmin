@@ -10,6 +10,25 @@ const console = consoleFactory(modulename);
 
 
 /**
+ * Accept only an exact HTTP(S) origin for this request's Host.
+ * The client supplies origin for OAuth callbacks because a TLS-terminating reverse proxy
+ * may make the server-side scheme different from the browser scheme.
+ * Never use an arbitrary caller-supplied host as a redirect URI.
+ */
+export const isAllowedOauthOrigin = (origin: string, requestHost: string): boolean => {
+    try {
+        const parsed = new URL(origin);
+        return (parsed.protocol === 'http:' || parsed.protocol === 'https:')
+            && parsed.host.toLowerCase() === requestHost.toLowerCase()
+            && parsed.origin === origin
+            && !parsed.username && !parsed.password;
+    } catch {
+        return false;
+    }
+};
+
+
+/**
  * Sets the user session and generates the provider redirect url
  */
 export const getOauthRedirectUrl = (ctx: InitializedCtx, purpose: 'login' | 'addMaster', origin: string) => {
