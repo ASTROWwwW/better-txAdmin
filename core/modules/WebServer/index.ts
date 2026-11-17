@@ -177,11 +177,19 @@ export default class WebServer {
         //Calls the appropriate callback
         try {
             // console.debug(`HTTP ${req.method} ${req.url}`);
-            if (!checkHttpLoad()) return;
+            if (!checkHttpLoad()) {
+                res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60' });
+                res.end('Service temporarily unavailable');
+                return;
+            }
             const socketIp = req?.socket?.remoteAddress;
             const xff = req?.headers?.['x-forwarded-for'];
             const rateLimitIp = resolveProxyRealIp(socketIp, xff) ?? socketIp;
-            if (!checkRateLimit(rateLimitIp)) return;
+            if (!checkRateLimit(rateLimitIp)) {
+                res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60' });
+                res.end('Too many requests');
+                return;
+            }
 
             // FIXME:NEXT:UPDATE: CVE-2026-111497 Mitigation
             // Reject inbound encoded bodies before Koa/Socket.IO decodes them.
