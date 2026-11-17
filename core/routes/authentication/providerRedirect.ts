@@ -3,7 +3,7 @@ import { InitializedCtx } from '@modules/WebServer/ctxTypes';
 import consoleFactory from '@lib/console';
 import { ApiOauthRedirectResp } from '@shared/authApiTypes';
 import { z } from 'zod';
-import { getOauthRedirectUrl } from './oauthMethods';
+import { getOauthRedirectUrl, isAllowedOauthOrigin } from './oauthMethods';
 const console = consoleFactory(modulename);
 
 const querySchema = z.object({
@@ -22,6 +22,9 @@ export default async function AuthProviderRedirect(ctx: InitializedCtx) {
         });
     }
     const { origin } = schemaRes.data;
+    if (!isAllowedOauthOrigin(origin, ctx.request.host)) {
+        return ctx.send<ApiOauthRedirectResp>({ error: 'Invalid OAuth callback origin.' });
+    }
 
     //Check if there are already admins set up
     if (!txCore.adminStore.hasAdmins()) {
