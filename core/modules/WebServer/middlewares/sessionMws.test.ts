@@ -59,10 +59,10 @@ suite('koaSessMw cookie Secure flag', () => {
         expect(res.setCookie.toLowerCase()).not.toContain('secure');
     });
 
-    it('sets Secure when a proxy forwards an https request', async () => {
+    it('does not trust forwarded https from an unconfigured proxy', async () => {
         const res = await requestWithHeaders({ 'x-forwarded-proto': 'https' });
         expect(res.status).toBe(200);
-        expect(res.setCookie.toLowerCase()).toContain('secure');
+        expect(res.setCookie.toLowerCase()).not.toContain('secure');
     });
 
     it('does not set Secure when the proxy forwards plain http', async () => {
